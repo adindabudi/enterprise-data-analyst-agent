@@ -1,0 +1,98 @@
+[project]
+name = "enterprise-data-analyst"
+version = "0.1.0"
+requires-python = "==3.12.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "asgi-lifespan==2.1.0",
+  "coverage==7.15.2",
+  "fakeredis[lua]==2.37.0",
+  "httpx==0.28.1",
+  "hypothesis==6.161.0",
+  "jsonschema==4.26.0",
+  "license-expression==30.4.4",
+  "pyright==1.1.411",
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-cov==7.1.0",
+  "pytest-mock==3.15.1",
+  "respx==0.23.1",
+  "ruff==0.15.22",
+]
+
+[tool.uv]
+package = false
+prerelease = "if-necessary-or-explicit"
+constraint-dependencies = ["cffi==2.0.0"]
+
+[tool.uv.workspace]
+members = [
+  "apps/api",
+  "services/sandbox",
+  "services/worker",
+  "packages/artifacts",
+  "packages/contracts/python",
+  "packages/fabric-auth",
+  "packages/provenance",
+  "packages/runtime-state",
+]
+
+[tool.uv.sources]
+eda-api = { workspace = true }
+eda-artifacts = { workspace = true }
+eda-contracts = { workspace = true }
+eda-fabric-auth = { workspace = true }
+eda-provenance = { workspace = true }
+eda-runtime-state = { workspace = true }
+eda-worker = { workspace = true }
+eda-sandbox = { workspace = true }
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["apps", "services", "packages", "tests"]
+markers = [
+  "integration: requires local emulators or disposable cloud resources",
+  "cloud: requires an explicitly selected Azure test environment",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["eda_api", "eda_contracts", "eda_provenance", "eda_worker"]
+
+[tool.coverage.report]
+# Floor for the fast unit gate. `make check` runs only "not integration and not cloud"
+# tests, so integration-heavy modules (worker runtime/host, service gateways, cloud auth
+# providers) are covered by the separate `local-integration` CI job rather than here.
+# Raise this as unit coverage grows.
+fail_under = 75
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test suites assert freely and often embed long fixture data literals.
+"tests/**/*.py" = ["S101", "E501"]
+"**/tests/**/*.py" = ["S101", "E501"]
+# Office Open XML parts are authored as single-line XML string literals.
+"packages/artifacts/src/eda_artifacts/documents.py" = ["E501"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+# Pyright strict-checks shipped source and operational scripts. Test suites are
+# validated at runtime by pytest; they intentionally use fakes, mocks, protected
+# access, and untyped fixtures, so they are not strict-type-checked here.
+include = ["apps/api/src", "services/worker/src", "packages", "scripts"]
+exclude = ["packages/contracts/typescript", "node_modules", "**/tests"]
+reportMissingTypeStubs = false

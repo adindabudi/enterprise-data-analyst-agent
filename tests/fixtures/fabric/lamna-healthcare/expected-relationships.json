@@ -1,0 +1,6 @@
+[
+  {"name": "departments_has_hospitals", "source": "Departments.DepartmentId", "target": "Hospitals.HospitalId", "foreignKey": "Departments.HospitalId"},
+  {"name": "rooms_has_departments", "source": "Rooms.RoomId", "target": "Departments.DepartmentId", "foreignKey": "Rooms.DepartmentId"},
+  {"name": "patients_has_rooms", "source": "Patients.PatientId", "target": "Rooms.RoomId", "foreignKey": "Patients.CurrentRoomId"},
+  {"name": "vitalsignequipment_has_patients", "source": "VitalSignEquipment.EquipmentId", "target": "Patients.PatientId", "foreignKey": "VitalSignEquipment.PatientId"}
+]

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "name": "lamna-healthcare",
+  "license": "MIT",
+  "upstreamRepository": "https://github.com/MicrosoftLearning/mslearn-fabric",
+  "upstreamCommit": "f0b76f80323a07fc6a4ca3666dd43f78d99a8418",
+  "labUrl": "https://microsoftlearning.github.io/mslearn-fabric/Instructions/Labs/24-build-ontology-semantic-model.html",
+  "archiveUrl": "https://raw.githubusercontent.com/MicrosoftLearning/mslearn-fabric/f0b76f80323a07fc6a4ca3666dd43f78d99a8418/Allfiles/Labs/23-24/sample-data.zip",
+  "sha256": "10e9f03a7361cdbdea5feac216b6762a5b7b22378a15893a0167c96b54dd9bf2",
+  "files": [
+    "Departments.csv",
+    "Hospitals.csv",
+    "Patients.csv",
+    "Rooms.csv",
+    "VitalSignEquipment.csv",
+    "VitalSignsReadings.csv"
+  ]
+}

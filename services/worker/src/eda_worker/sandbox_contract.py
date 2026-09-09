@@ -1,0 +1,22 @@
+WORKSPACE = "/workspace/task"
+INPUTS = f"{WORKSPACE}/inputs"
+SOURCES = f"{WORKSPACE}/sources"
+OUTPUTS = f"{WORKSPACE}/outputs"
+EXECUTION_CONTEXT = f"{WORKSPACE}/execution-context.json"
+
+EXECUTION_GUIDANCE = (
+    "Run bounded Python or JavaScript in the isolated analysis sandbox. "
+    f"The working directory is {WORKSPACE}. Read execution-context.json for inputs "
+    "(display_name, path, sha256), parameters, and output_directory. Match input entries by "
+    "the SHA256 of the exact input_artifacts supplied to this call; the context can also list "
+    "earlier task imports. Read their bytes instead of retyping source values. "
+    "Python: context = json.loads(Path('execution-context.json').read_text()). "
+    "Write all files to collect directly inside context['output_directory'] and declare their "
+    "file names in expected_outputs. That directory is cleared BEFORE EVERY execution, and "
+    "its new files are persisted after execution; use returned artifact_refs to reimport earlier results. "
+    "Files in the working directory or /tmp are temporary and are NOT collected. /mnt/data is not provided. "
+    "For calculations without files leave expected_outputs empty. artifact_refs contains generated "
+    "files; diagnostic_refs contains stdout/stderr, readable with inspect_artifact. Reuse a computed "
+    "data artifact for all requested formats instead of independently transcribing the same results. "
+    "No network access or runtime package installation is available."
+)

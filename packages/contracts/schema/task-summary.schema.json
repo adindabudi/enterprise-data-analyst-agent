@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "TaskStatus": {
+      "enum": [
+        "planning",
+        "acquiring_data",
+        "analyzing",
+        "generating",
+        "validating",
+        "publishing",
+        "blocked_auth",
+        "cancelling",
+        "completed",
+        "cancelled",
+        "failed",
+        "failed_cancellation"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.enterprise-data-analyst.dev/task-summary/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activeAttemptId": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Activeattemptid"
+    },
+    "checkpointSequence": {
+      "minimum": 0,
+      "title": "Checkpointsequence",
+      "type": "integer"
+    },
+    "sessionId": {
+      "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+      "title": "Sessionid",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus"
+    },
+    "statusDetail": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Statusdetail"
+    },
+    "taskId": {
+      "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+      "title": "Taskid",
+      "type": "string"
+    }
+  },
+  "required": ["taskId", "sessionId", "status", "checkpointSequence"],
+  "title": "TaskSummary",
+  "type": "object"
+}

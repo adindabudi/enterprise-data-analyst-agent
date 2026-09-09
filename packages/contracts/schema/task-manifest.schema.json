@@ -1,0 +1,453 @@
+{
+  "$defs": {
+    "CheckRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "keyTotalsReconciled": {
+          "title": "Keytotalsreconciled",
+          "type": "boolean"
+        },
+        "missingValuesReviewed": {
+          "title": "Missingvaluesreviewed",
+          "type": "boolean"
+        },
+        "schemaValid": {
+          "title": "Schemavalid",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schemaValid",
+        "keyTotalsReconciled",
+        "missingValuesReviewed"
+      ],
+      "title": "CheckRecord",
+      "type": "object"
+    },
+    "ClaimReference": {
+      "additionalProperties": false,
+      "properties": {
+        "claimId": {
+          "title": "Claimid",
+          "type": "string"
+        },
+        "executionIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Executionids",
+          "type": "array"
+        },
+        "inputRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputrefs",
+          "type": "array"
+        },
+        "outputRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Outputrefs",
+          "type": "array"
+        },
+        "queryIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Queryids",
+          "type": "array"
+        }
+      },
+      "required": ["claimId"],
+      "title": "ClaimReference",
+      "type": "object"
+    },
+    "ExecutionRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "executionId": {
+          "title": "Executionid",
+          "type": "string"
+        },
+        "exitCode": {
+          "title": "Exitcode",
+          "type": "integer"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Parameters",
+          "type": "object"
+        },
+        "runtimeImageDigest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Runtimeimagedigest",
+          "type": "string"
+        },
+        "scriptArtifactId": {
+          "pattern": "^(artifact|input|output|result|script)-[A-Za-z0-9_-]+$",
+          "title": "Scriptartifactid",
+          "type": "string"
+        },
+        "scriptSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Scriptsha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "executionId",
+        "scriptArtifactId",
+        "scriptSha256",
+        "parameters",
+        "runtimeImageDigest",
+        "exitCode"
+      ],
+      "title": "ExecutionRecord",
+      "type": "object"
+    },
+    "FabricQueryRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "default": 1,
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "executedAt": {
+          "format": "date-time",
+          "title": "Executedat",
+          "type": "string"
+        },
+        "providerSchemaSha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Providerschemasha256"
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "enum": ["schema", "aggregate", "control_total"],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Purpose"
+        },
+        "queryId": {
+          "pattern": "^fabric-query-[A-Za-z0-9_-]+$",
+          "title": "Queryid",
+          "type": "string"
+        },
+        "querySha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Querysha256",
+          "type": "string"
+        },
+        "reconciliationStatus": {
+          "default": "not_required",
+          "enum": ["not_required", "pending", "matched", "mismatched"],
+          "title": "Reconciliationstatus",
+          "type": "string"
+        },
+        "resultArtifactId": {
+          "pattern": "^(artifact|input|output|result|script)-[A-Za-z0-9_-]+$",
+          "title": "Resultartifactid",
+          "type": "string"
+        },
+        "resultSha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resultsha256"
+        },
+        "resultShape": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z_]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resultshape"
+        },
+        "rowCount": {
+          "minimum": 0,
+          "title": "Rowcount",
+          "type": "integer"
+        },
+        "semanticModelId": {
+          "title": "Semanticmodelid",
+          "type": "string"
+        },
+        "sourceAlias": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]{1,39}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sourcealias"
+        }
+      },
+      "required": [
+        "queryId",
+        "semanticModelId",
+        "querySha256",
+        "resultArtifactId",
+        "rowCount",
+        "executedAt"
+      ],
+      "title": "FabricQueryRecord",
+      "type": "object"
+    },
+    "ManifestArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "pattern": "^(artifact|input|output|result|script)-[A-Za-z0-9_-]+$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": ["artifactId", "version", "sha256"],
+      "title": "ManifestArtifact",
+      "type": "object"
+    },
+    "ModelRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "baseModel": {
+          "title": "Basemodel",
+          "type": "string"
+        },
+        "contextSnapshotVersion": {
+          "minimum": 1,
+          "title": "Contextsnapshotversion",
+          "type": "integer"
+        },
+        "deployment": {
+          "title": "Deployment",
+          "type": "string"
+        },
+        "effort": {
+          "enum": ["medium", "high", "xhigh"],
+          "title": "Effort",
+          "type": "string"
+        },
+        "hosting": {
+          "enum": ["azure", "anthropic"],
+          "title": "Hosting",
+          "type": "string"
+        },
+        "modelProfile": {
+          "pattern": "^[a-z0-9][a-z0-9.-]{2,79}$",
+          "title": "Modelprofile",
+          "type": "string"
+        },
+        "promptSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Promptsha256",
+          "type": "string"
+        },
+        "promptTemplateVersion": {
+          "title": "Prompttemplateversion",
+          "type": "string"
+        },
+        "provider": {
+          "const": "foundry",
+          "title": "Provider",
+          "type": "string"
+        },
+        "reasoningMode": {
+          "enum": ["adaptive", "standard", "disabled"],
+          "title": "Reasoningmode",
+          "type": "string"
+        },
+        "requestOptionsSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Requestoptionssha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "modelProfile",
+        "baseModel",
+        "deployment",
+        "hosting",
+        "effort",
+        "reasoningMode",
+        "promptTemplateVersion",
+        "promptSha256",
+        "requestOptionsSha256",
+        "contextSnapshotVersion"
+      ],
+      "title": "ModelRecord",
+      "type": "object"
+    },
+    "OutputArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "pattern": "^(artifact|input|output|result|script)-[A-Za-z0-9_-]+$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "status": {
+          "enum": ["ready", "rejected", "incomplete"],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": ["artifactId", "version", "sha256", "status"],
+      "title": "OutputArtifact",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.enterprise-data-analyst.dev/task-manifest/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "$ref": "#/$defs/CheckRecord"
+    },
+    "claims": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ClaimReference"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "createdAt": {
+      "format": "date-time",
+      "title": "Createdat",
+      "type": "string"
+    },
+    "executions": {
+      "items": {
+        "$ref": "#/$defs/ExecutionRecord"
+      },
+      "title": "Executions",
+      "type": "array"
+    },
+    "fabricQueries": {
+      "items": {
+        "$ref": "#/$defs/FabricQueryRecord"
+      },
+      "title": "Fabricqueries",
+      "type": "array"
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/ManifestArtifact"
+      },
+      "title": "Inputs",
+      "type": "array"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelRecord"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/OutputArtifact"
+      },
+      "title": "Outputs",
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schemaversion",
+      "type": "string"
+    },
+    "taskId": {
+      "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+      "title": "Taskid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "taskId",
+    "model",
+    "inputs",
+    "fabricQueries",
+    "executions",
+    "checks",
+    "outputs",
+    "createdAt"
+  ],
+  "title": "TaskManifest",
+  "type": "object"
+}

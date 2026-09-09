@@ -1,0 +1,87 @@
+{
+  "tools": [
+    {
+      "name": "DiscoverArtifacts",
+      "description": "Discover reports and semantic models relevant to a natural-language question.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": {"type": "string"}
+        },
+        "required": ["question"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "GetReportMetadata",
+      "description": "Retrieve report pages, visuals, bindings, filters, and workspace metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportObjectId": {"type": "string", "format": "uuid"},
+          "queries": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["reportObjectId"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "GetSemanticModelSchema",
+      "description": "Retrieve semantic-model tables, columns, measures, relationships, instructions, and verified answers.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifactId": {"type": "string", "format": "uuid"},
+          "queries": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["artifactId"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ValueSearch",
+      "description": "Resolve exact semantic-model values before applying named-entity filters.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifactId": {"type": "string", "format": "uuid"},
+          "searchTerms": {"type": "array", "items": {"type": "string"}},
+          "scope": {"type": "string"}
+        },
+        "required": ["artifactId", "searchTerms"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ExecuteQuery",
+      "description": "Execute one to four DAX queries against a semantic model and return bounded tabular results.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifactId": {"type": "string", "format": "uuid"},
+          "daxQueries": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 4
+          },
+          "maxRows": {"type": "integer", "minimum": 1, "maximum": 1000}
+        },
+        "required": ["artifactId", "daxQueries"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ResolveReportIdFromUrl",
+      "description": "Resolve a Power BI report object identifier from a report URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportUrl": {"type": "string", "format": "uri"}
+        },
+        "required": ["reportUrl"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

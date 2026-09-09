@@ -1,0 +1,1 @@
+"""Ontology provider configuration primitives."""

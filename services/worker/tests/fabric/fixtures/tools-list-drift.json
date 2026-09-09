@@ -1,0 +1,15 @@
+{
+  "tools": [
+    {
+      "name": "GetSemanticModelSchema",
+      "description": "Changed provider schema.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelId": {"type": "string"}
+        },
+        "required": ["modelId"]
+      }
+    }
+  ]
+}

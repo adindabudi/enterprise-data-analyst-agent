@@ -1,0 +1,40 @@
+[project]
+name = "eda-worker"
+version = "0.1.0"
+requires-python = "==3.12.*"
+dependencies = [
+	"agent-framework-core==1.16.0",
+	"agent-framework-foundry==1.11.0",
+	"agent-framework-foundry-hosting==1.0.0b260827",
+	"agent-framework-openai==1.14.1",
+	"azure-containerapps-sandbox==0.1.0b4",
+	"azure-ai-agentserver-responses==2.2.0b1",
+	"azure-monitor-opentelemetry==1.8.9",
+	"opentelemetry-api==1.43.0",
+	"azure-cosmos==4.16.2",
+	"azure-identity==1.25.3",
+	"azure-storage-blob==12.30.0",
+	"eda-contracts",
+	"eda-fabric-auth",
+	"eda-provenance",
+	"eda-runtime-state",
+	"httpx==0.28.1",
+	"pydantic-settings==2.14.2",
+	"redis==8.0.1",
+	"redis-entraid==1.2.1",
+	"mcp==1.28.1",
+]
+
+[project.scripts]
+eda-worker = "eda_worker.main:main"
+
+[build-system]
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eda_worker"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/eda_worker/agent/prompts/claude-opus-4-8-v1.md" = "eda_worker/agent/prompts/claude-opus-4-8-v1.md"
+"src/eda_worker/agent/prompts/gpt-5.6-terra-v1.md" = "eda_worker/agent/prompts/gpt-5.6-terra-v1.md"

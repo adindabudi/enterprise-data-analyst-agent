@@ -1,0 +1,9 @@
+title = "Enterprise Data Analyst gitleaks policy"
+
+[allowlist]
+  description = "Exclude only vendored or generated directories. Synthetic secret-shaped test data must be constructed at runtime unless a reviewed fixture path is added here with justification."
+  paths = [
+    '''^node_modules/''',
+    '''^\.venv/''',
+    '''^\.artifacts/'''
+  ]

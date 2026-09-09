@@ -1,0 +1,16 @@
+{
+  "$id": "https://schemas.enterprise-data-analyst.dev/steering-request/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "instruction": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Instruction",
+      "type": "string"
+    }
+  },
+  "required": ["instruction"],
+  "title": "SteeringRequest",
+  "type": "object"
+}

@@ -1,0 +1,7 @@
+{
+  "Hospitals": "HospitalId",
+  "Departments": "DepartmentId",
+  "Rooms": "RoomId",
+  "Patients": "PatientId",
+  "VitalSignEquipment": "EquipmentId"
+}

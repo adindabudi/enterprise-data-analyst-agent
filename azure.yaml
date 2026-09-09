@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: enterprise-data-analyst
+metadata:
+  template: enterprise-data-analyst@0.1.0
+requiredVersions:
+  azd: ">=1.31.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.11"
+infra:
+  provider: bicep
+  path: infra/bicep
+  module: main
+services:
+  ai-project:
+    host: azure.ai.project
+    endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
+  api:
+    project: .
+    host: containerapp
+    language: python
+    docker:
+      path: apps/api/Dockerfile
+      context: .
+      remoteBuild: true
+  long-job:
+    project: .
+    host: azure.ai.agent
+    language: docker
+    uses:
+      - ai-project
+    image: ${EDA_WORKER_IMAGE}
+    kind: hosted
+    name: enterprise-data-analyst-long-job
+    description: Deterministic long-running enterprise data analysis workflow
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    env:
+      EDA_APP_ENV: production
+      ENABLE_CONSOLE_EXPORTERS: "false"
+      EDA_ENTRA_CLIENT_ID: ${AZURE_ENTRA_CLIENT_ID}
+      EDA_COSMOS_ENDPOINT: ${COSMOS_ENDPOINT}
+      EDA_COSMOS_DATABASE: enterprise-data-analyst
+      EDA_COSMOS_WORKSPACE_CONTAINER: workspace
+      EDA_COSMOS_RUNTIME_CONTAINER: runtime
+      EDA_COSMOS_AUTH_CONTAINER: auth
+      EDA_COSMOS_FABRIC_AUTH_CONTAINER: fabricAuth
+      EDA_BLOB_ACCOUNT_URL: ${STORAGE_BLOB_ENDPOINT}
+      EDA_BLOB_SESSIONS_CONTAINER: sessions
+      EDA_REDIS_URL: rediss://${REDIS_HOSTNAME}:${REDIS_PORT}/0
+      EDA_FOUNDRY_MODEL_DEPLOYMENT: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+      EDA_MODEL_PROFILE: ${EDA_MODEL_PROFILE}
+      EDA_DEPLOYMENT_ID: ${DEPLOYMENT_ID}
+      EDA_WORKER_IMAGE_DIGEST: ${EDA_WORKER_IMAGE_DIGEST}
+      EDA_SANDBOX_IMAGE_DIGEST: ${EDA_SANDBOX_IMAGE_DIGEST}
+      EDA_SANDBOX_SUBSCRIPTION_ID: ${EDA_SANDBOX_SUBSCRIPTION_ID}
+      EDA_SANDBOX_RESOURCE_GROUP: ${EDA_SANDBOX_RESOURCE_GROUP}
+      EDA_SANDBOX_GROUP: ${EDA_SANDBOX_GROUP}
+      EDA_SANDBOX_REGION: ${EDA_SANDBOX_REGION}
+      EDA_SANDBOX_DISK_IMAGE_ID: ${EDA_SANDBOX_DISK_IMAGE_ID}
+      DOCUMENTS_ENABLED: ${DOCUMENTS_ENABLED=false}
+      FABRIC_ENABLED: ${FABRIC_ENABLED=false}
+      FABRIC_PROVIDER: ${FABRIC_PROVIDER=}
+      FABRIC_TENANT_ID: ${FABRIC_TENANT_ID=}
+      FABRIC_CLIENT_ID: ${FABRIC_CLIENT_ID=}
+      FABRIC_KEY_VAULT_URL: ${FABRIC_KEY_VAULT_URL=}
+      FABRIC_SIGNING_CERTIFICATE_NAME: ${FABRIC_SIGNING_CERTIFICATE_NAME=fabric-oauth-signing}
+      FABRIC_CACHE_WRAP_KEY_NAME: ${FABRIC_CACHE_WRAP_KEY_NAME=fabric-cache-wrap}
+      FABRIC_SEMANTIC_MODELS_JSON: ${FABRIC_SEMANTIC_MODELS_JSON=}
+      FABRIC_ONTOLOGIES_JSON: ${FABRIC_ONTOLOGIES_JSON=}
+    container:
+      resources:
+        cpu: "0.5"
+        memory: 1Gi
+    sessionConfiguration:
+      idleTimeoutSeconds: 300
+hooks:
+  preprovision:
+    shell: sh
+    dir: .
+    run: ./scripts/doctor.sh && ./scripts/doctor-documents.sh --phase prebuild && ./scripts/ensure-entra-app.sh && ./scripts/preflight-model.sh && ./scripts/configure-fabric-entra.sh bootstrap && ./scripts/run-fabric-provider-hook.sh preprovision
+  postprovision:
+    shell: sh
+    dir: .
+    run: ./scripts/configure-fabric-entra.sh finalize && ./scripts/run-fabric-provider-hook.sh postprovision && ./scripts/build-worker-image.sh && ./scripts/build-sandbox-image.sh && ./scripts/deploy-sandbox-group.sh && ./scripts/configure-entra-federation.sh
+  postdeploy:
+    shell: sh
+    dir: .
+    run: uv run python scripts/bind-hosted-agent-rbac.py && ./scripts/doctor-documents.sh --phase postdeploy --output .artifacts/document-image-contract.json && ./scripts/publish-document-contract-job.sh && ./scripts/pin-application-images.sh && ./scripts/run-fabric-provider-hook.sh postdeploy && ./scripts/deploy-smoke.sh

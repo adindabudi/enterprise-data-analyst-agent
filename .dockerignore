@@ -1,0 +1,13 @@
+.git
+.venv
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+**/.terraform
+.artifacts/*
+!.artifacts/model-contract.json
+!.artifacts/tokenizer-calibration.json
+.azure
+/output.log
+services/worker/document-skills/*
+!services/worker/document-skills/build-bundles.py

@@ -1,0 +1,1163 @@
+{
+  "$defs": {
+    "AnalysisProgressEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ProgressPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "analysis_progress",
+          "default": "analysis_progress",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "AnalysisProgressEvent",
+      "type": "object"
+    },
+    "ArtifactEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ArtifactEventPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "enum": ["artifact.created", "artifact.validating", "artifact.ready"],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "type",
+        "payload"
+      ],
+      "title": "ArtifactEvent",
+      "type": "object"
+    },
+    "ArtifactEventPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "status": {
+          "$ref": "#/$defs/ArtifactStatus"
+        }
+      },
+      "required": ["artifact", "status"],
+      "title": "ArtifactEventPayload",
+      "type": "object"
+    },
+    "ArtifactKind": {
+      "enum": [
+        "input",
+        "xlsx",
+        "xlsm",
+        "html",
+        "svg",
+        "png",
+        "mmd",
+        "pptx",
+        "docx",
+        "pdf",
+        "manifest",
+        "script",
+        "data"
+      ],
+      "title": "ArtifactKind",
+      "type": "string"
+    },
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "pattern": "^(artifact|input|output|result|script)-[A-Za-z0-9_-]+$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ArtifactKind"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": ["artifactId", "version", "kind", "sha256"],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "ArtifactStatus": {
+      "enum": [
+        "created",
+        "generating",
+        "validating",
+        "repairing",
+        "ready",
+        "rejected",
+        "incomplete"
+      ],
+      "title": "ArtifactStatus",
+      "type": "string"
+    },
+    "AttemptSupersededEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AttemptSupersededPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "attempt.superseded",
+          "default": "attempt.superseded",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "AttemptSupersededEvent",
+      "type": "object"
+    },
+    "AttemptSupersededPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "replacementAttemptId": {
+          "title": "Replacementattemptid",
+          "type": "string"
+        },
+        "supersededAttemptId": {
+          "title": "Supersededattemptid",
+          "type": "string"
+        }
+      },
+      "required": ["supersededAttemptId", "replacementAttemptId"],
+      "title": "AttemptSupersededPayload",
+      "type": "object"
+    },
+    "AuthRequiredEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AuthRequiredPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "auth.required",
+          "default": "auth.required",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "AuthRequiredEvent",
+      "type": "object"
+    },
+    "AuthRequiredPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "actionPath": {
+          "const": "/api/fabric/auth/start",
+          "default": "/api/fabric/auth/start",
+          "title": "Actionpath",
+          "type": "string"
+        }
+      },
+      "title": "AuthRequiredPayload",
+      "type": "object"
+    },
+    "MessageDeltaEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "attemptSequence": {
+          "minimum": 0,
+          "title": "Attemptsequence",
+          "type": "integer"
+        },
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/MessageDeltaPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "responseAttemptId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Responseattemptid",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.delta",
+          "default": "message.delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "responseAttemptId",
+        "attemptSequence",
+        "payload",
+        "type"
+      ],
+      "title": "MessageDeltaEvent",
+      "type": "object"
+    },
+    "MessageDeltaPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "delta": {
+          "maxLength": 16384,
+          "minLength": 1,
+          "title": "Delta",
+          "type": "string"
+        }
+      },
+      "required": ["delta"],
+      "title": "MessageDeltaPayload",
+      "type": "object"
+    },
+    "OperationEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "attemptSequence": {
+          "minimum": 0,
+          "title": "Attemptsequence",
+          "type": "integer"
+        },
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/OperationPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "responseAttemptId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Responseattemptid",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "tool.started",
+            "tool.progress",
+            "tool.completed",
+            "code.started",
+            "code.stdout",
+            "code.stderr",
+            "code.completed"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "responseAttemptId",
+        "attemptSequence",
+        "type",
+        "payload"
+      ],
+      "title": "OperationEvent",
+      "type": "object"
+    },
+    "OperationPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactRefs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ArtifactRef"
+          },
+          "title": "Artifactrefs",
+          "type": "array"
+        },
+        "capability": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Capability",
+          "type": "string"
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Durationms"
+        },
+        "exitCode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exitcode"
+        },
+        "operationId": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Operationid",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        }
+      },
+      "required": ["operationId", "capability"],
+      "title": "OperationPayload",
+      "type": "object"
+    },
+    "ProgressPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "milestone": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Milestone",
+          "type": "string"
+        },
+        "state": {
+          "default": "running",
+          "enum": ["running", "completed", "failed"],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": ["milestone"],
+      "title": "ProgressPayload",
+      "type": "object"
+    },
+    "ProvenanceAddedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ProvenanceAddedPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "provenance.added",
+          "default": "provenance.added",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "ProvenanceAddedEvent",
+      "type": "object"
+    },
+    "ProvenanceAddedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "referenceId": {
+          "title": "Referenceid",
+          "type": "string"
+        },
+        "referenceKind": {
+          "enum": ["input", "query", "execution", "artifact", "claim"],
+          "title": "Referencekind",
+          "type": "string"
+        }
+      },
+      "required": ["referenceId", "referenceKind"],
+      "title": "ProvenanceAddedPayload",
+      "type": "object"
+    },
+    "RunTerminalEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunTerminalPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "enum": ["run.completed", "run.failed", "run.cancelled"],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "type",
+        "payload"
+      ],
+      "title": "RunTerminalEvent",
+      "type": "object"
+    },
+    "RunTerminalPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "diagnosticRef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "finalMessageId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finalmessageid"
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus"
+        }
+      },
+      "required": ["status"],
+      "title": "RunTerminalPayload",
+      "type": "object"
+    },
+    "SteeringQueuedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SteeringQueuedPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.steering_queued",
+          "default": "task.steering_queued",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "SteeringQueuedEvent",
+      "type": "object"
+    },
+    "SteeringQueuedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "commandId": {
+          "title": "Commandid",
+          "type": "string"
+        },
+        "inboxSequence": {
+          "minimum": 1,
+          "title": "Inboxsequence",
+          "type": "integer"
+        },
+        "label": {
+          "const": "Queued for next checkpoint",
+          "default": "Queued for next checkpoint",
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": ["commandId", "inboxSequence"],
+      "title": "SteeringQueuedPayload",
+      "type": "object"
+    },
+    "StreamResumedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/StreamResumedPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream.resumed",
+          "default": "stream.resumed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "StreamResumedEvent",
+      "type": "object"
+    },
+    "StreamResumedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "lastDurableSequence": {
+          "minimum": 0,
+          "title": "Lastdurablesequence",
+          "type": "integer"
+        },
+        "omittedFromSequence": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Omittedfromsequence"
+        },
+        "omittedToSequence": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Omittedtosequence"
+        }
+      },
+      "required": ["lastDurableSequence"],
+      "title": "StreamResumedPayload",
+      "type": "object"
+    },
+    "TaskCheckpointPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpointSequence": {
+          "minimum": 0,
+          "title": "Checkpointsequence",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus"
+        }
+      },
+      "required": ["status", "checkpointSequence"],
+      "title": "TaskCheckpointPayload",
+      "type": "object"
+    },
+    "TaskCheckpointedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskCheckpointPayload"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.checkpointed",
+          "default": "task.checkpointed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "TaskCheckpointedEvent",
+      "type": "object"
+    },
+    "TaskStatus": {
+      "enum": [
+        "planning",
+        "acquiring_data",
+        "analyzing",
+        "generating",
+        "validating",
+        "publishing",
+        "blocked_auth",
+        "cancelling",
+        "completed",
+        "cancelled",
+        "failed",
+        "failed_cancellation"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    },
+    "TodoItem": {
+      "additionalProperties": false,
+      "properties": {
+        "completed": {
+          "title": "Completed",
+          "type": "boolean"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "todoId": {
+          "title": "Todoid",
+          "type": "string"
+        }
+      },
+      "required": ["todoId", "text", "completed"],
+      "title": "TodoItem",
+      "type": "object"
+    },
+    "TodoUpdatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "pattern": "^evt_[A-Za-z0-9_-]{8,}$",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "payload": {
+          "items": {
+            "$ref": "#/$defs/TodoItem"
+          },
+          "title": "Payload",
+          "type": "array"
+        },
+        "provenanceRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Provenancerefs",
+          "type": "array"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "sessionId": {
+          "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+          "title": "Taskid",
+          "type": "string"
+        },
+        "type": {
+          "const": "todo.updated",
+          "default": "todo.updated",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurredAt",
+        "eventId",
+        "sequence",
+        "sessionId",
+        "taskId",
+        "payload",
+        "type"
+      ],
+      "title": "TodoUpdatedEvent",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.enterprise-data-analyst.dev/activity-event/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discriminator": {
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/MessageDeltaEvent"
+    },
+    {
+      "$ref": "#/$defs/AnalysisProgressEvent"
+    },
+    {
+      "$ref": "#/$defs/AttemptSupersededEvent"
+    },
+    {
+      "$ref": "#/$defs/OperationEvent"
+    },
+    {
+      "$ref": "#/$defs/TodoUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskCheckpointedEvent"
+    },
+    {
+      "$ref": "#/$defs/SteeringQueuedEvent"
+    },
+    {
+      "$ref": "#/$defs/ProvenanceAddedEvent"
+    },
+    {
+      "$ref": "#/$defs/ArtifactEvent"
+    },
+    {
+      "$ref": "#/$defs/AuthRequiredEvent"
+    },
+    {
+      "$ref": "#/$defs/RunTerminalEvent"
+    },
+    {
+      "$ref": "#/$defs/StreamResumedEvent"
+    }
+  ],
+  "title": "ActivityEvent",
+  "type": "object"
+}

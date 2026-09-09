@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "ArtifactKind": {
+      "enum": [
+        "input",
+        "xlsx",
+        "xlsm",
+        "html",
+        "svg",
+        "png",
+        "mmd",
+        "pptx",
+        "docx",
+        "pdf",
+        "manifest",
+        "script",
+        "data"
+      ],
+      "title": "ArtifactKind",
+      "type": "string"
+    },
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "pattern": "^(artifact|input|output|result|script)-[A-Za-z0-9_-]+$",
+          "title": "Artifactid",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ArtifactKind"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": ["artifactId", "version", "kind", "sha256"],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "ArtifactStatus": {
+      "enum": [
+        "created",
+        "generating",
+        "validating",
+        "repairing",
+        "ready",
+        "rejected",
+        "incomplete"
+      ],
+      "title": "ArtifactStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.enterprise-data-analyst.dev/artifact-record/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifactId": {
+      "pattern": "^(artifact|input|output|result|script)-[A-Za-z0-9_-]+$",
+      "title": "Artifactid",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/ArtifactKind"
+    },
+    "mediaType": {
+      "maxLength": 127,
+      "minLength": 3,
+      "title": "Mediatype",
+      "type": "string"
+    },
+    "sessionId": {
+      "pattern": "^ses_[A-Za-z0-9_-]{8,}$",
+      "title": "Sessionid",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "sizeBytes": {
+      "maximum": 1073741824,
+      "minimum": 0,
+      "title": "Sizebytes",
+      "type": "integer"
+    },
+    "status": {
+      "$ref": "#/$defs/ArtifactStatus"
+    },
+    "taskId": {
+      "pattern": "^task_[A-Za-z0-9_-]{8,}$",
+      "title": "Taskid",
+      "type": "string"
+    },
+    "validationReportRef": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "artifactId",
+    "version",
+    "kind",
+    "sha256",
+    "sessionId",
+    "taskId",
+    "status",
+    "mediaType",
+    "sizeBytes"
+  ],
+  "title": "ArtifactRecord",
+  "type": "object"
+}

@@ -1,0 +1,30 @@
+{
+  "rowCounts": {
+    "Hospitals": 1,
+    "Departments": 3,
+    "Rooms": 10,
+    "Patients": 5,
+    "VitalSignEquipment": 5,
+    "VitalSignsReadings": 20
+  },
+  "roomsByDepartment": {
+    "Intensive Care Unit": 3,
+    "Emergency Department": 3,
+    "Surgical Services": 4
+  },
+  "patientsByDepartment": {
+    "Intensive Care Unit": 3,
+    "Surgical Services": 2
+  },
+  "kerryAllen": {
+    "room": "ICU-301",
+    "department": "Intensive Care Unit",
+    "hospital": "Lamna Healthcare Regional Medical Center"
+  },
+  "VS-1001": {
+    "readingCount": 8,
+    "minOxygenSaturation": 93,
+    "maxHeartRate": 98,
+    "latestTimestamp": "2026-02-02T08:35:00Z"
+  }
+}

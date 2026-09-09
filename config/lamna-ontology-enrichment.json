@@ -1,0 +1,65 @@
+{
+  "entityTypes": {
+    "patients": {
+      "description": "Admitted patients, one row per PatientId.",
+      "synonyms": [
+        "pasien",
+        "patient",
+        "inpatient",
+        "admitted patient",
+        "penderita"
+      ],
+      "properties": {
+        "DateOfBirth": {
+          "description": "Birth date; age is not stored and has to be derived from it."
+        },
+        "AdmissionDate": {
+          "description": "Admission date; length of stay is not stored and has to be derived from it."
+        },
+        "CurrentRoomId": {
+          "description": "The room the patient occupies now; joins rooms.RoomId."
+        }
+      }
+    },
+    "rooms": {
+      "description": "Hospital rooms, each belonging to one department.",
+      "synonyms": ["kamar", "ruangan", "bed", "ward room"],
+      "properties": {
+        "RoomType": {
+          "description": "One of Medical, Post-Op, Emergency, Telemetry, Critical Care."
+        }
+      }
+    },
+    "departments": {
+      "description": "Clinical departments, each belonging to one hospital.",
+      "synonyms": ["departemen", "unit", "ward", "bangsal"],
+      "properties": {
+        "DepartmentName": {
+          "description": "One of Emergency Department, Intensive Care Unit, Medical Ward, Surgical Services, Telemetry."
+        }
+      }
+    },
+    "hospitals": {
+      "description": "Lamna hospitals, in Seattle, Portland, Spokane and Yakima.",
+      "synonyms": ["rumah sakit", "RS", "facility", "site"]
+    },
+    "vitalsignequipment": {
+      "description": "Bedside monitors assigned to patients. OxygenSaturation is SpO2 in percent, HeartRate is beats per minute, RespiratoryRate is breaths per minute.",
+      "synonyms": [
+        "monitor",
+        "bedside monitor",
+        "alat monitor",
+        "SpO2 monitor",
+        "telemetry"
+      ],
+      "properties": {
+        "EquipmentType": {
+          "description": "One of Spot-Check Monitor, Continuous Monitoring, Telemetry Monitor."
+        },
+        "PatientId": {
+          "description": "The monitored patient; joins patients.PatientId."
+        }
+      }
+    }
+  }
+}

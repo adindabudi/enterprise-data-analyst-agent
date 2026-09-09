@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "currency": "USD",
+  "expectedTotal": "1250000.50",
+  "rows": [
+    {"region": "APAC", "revenue": "425000.25"},
+    {"region": "EMEA", "revenue": "350000.00"},
+    {"region": "AMER", "revenue": "475000.25"}
+  ]
+}

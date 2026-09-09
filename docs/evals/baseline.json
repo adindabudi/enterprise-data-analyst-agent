@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "profile": {
+    "modelProfile": "gpt-5.6-terra-medium-v1",
+    "servedModel": "gpt-5.6-terra",
+    "servedModelSnapshot": "2026-07-09",
+    "mode": "standard",
+    "effort": "medium"
+  },
+  "requiredIdentityFields": [
+    "profileHash",
+    "promptVersion",
+    "promptHash",
+    "requestOptionsHash",
+    "corpusHash",
+    "providerContractHash",
+    "fixtureHash"
+  ],
+  "accepted": [],
+  "reviewStatus": "pending-reviewed-baseline",
+  "reviewInstructions": "Create a reviewed Terra-only accepted baseline from an offline eval artifact. Do not add synthetic scores or cross-profile entries."
+}

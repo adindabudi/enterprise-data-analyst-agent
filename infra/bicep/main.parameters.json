@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "resourceGroupName": {
+      "value": "${AZURE_RESOURCE_GROUP}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "principalId": {
+      "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "entraClientId": {
+      "value": "${AZURE_ENTRA_CLIENT_ID}"
+    },
+    "modelProfile": {
+      "value": "${EDA_MODEL_PROFILE}"
+    },
+    "monthlyBudgetAmount": {
+      "value": "${AZURE_MONTHLY_BUDGET_AMOUNT}"
+    },
+    "apiImage": {
+      "value": "${EDA_API_IMAGE=example.azurecr.io/eda-api@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    },
+    "workerImage": {
+      "value": "${EDA_WORKER_IMAGE=example.azurecr.io/eda-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    },
+    "productDataPublicAccessEnabled": {
+      "value": "${PRODUCT_DATA_PUBLIC_ACCESS_ENABLED=false}"
+    },
+    "fabricEnabled": {
+      "value": "${FABRIC_ENABLED=false}"
+    },
+    "fabricProvider": {
+      "value": "${FABRIC_PROVIDER=}"
+    },
+    "fabricTenantId": {
+      "value": "${FABRIC_TENANT_ID=}"
+    },
+    "fabricClientId": {
+      "value": "${FABRIC_CLIENT_ID=}"
+    },
+    "fabricSemanticModelsJson": {
+      "value": "${FABRIC_SEMANTIC_MODELS_JSON=}"
+    },
+    "fabricOntologiesJson": {
+      "value": "${FABRIC_ONTOLOGIES_JSON=}"
+    },
+    "fabricSigningCertificateReady": {
+      "value": "${FABRIC_SIGNING_CERTIFICATE_READY=false}"
+    },
+    "acceptancePrincipalId": {
+      "value": "${FABRIC_ACCEPTANCE_PRINCIPAL_ID=}"
+    },
+    "documentsEnabled": {
+      "value": "${DOCUMENTS_ENABLED=false}"
+    },
+    "powerBiProjectEnabled": {
+      "value": "${POWERBI_PROJECT_ENABLED=false}"
+    }
+  }
+}

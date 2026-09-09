@@ -1,0 +1,22 @@
+# Superpowers planning docs are authored freehand.
+docs/superpowers/**
+
+# Generated, compiled, and copied build artifacts.
+apps/api/static/**
+infra/bicep/main.json
+
+# Vendored external Power BI PBIR JSON schemas (kept byte-identical to upstream).
+packages/artifacts/src/eda_artifacts/schemas/**
+
+# Report template definitions consumed verbatim.
+services/worker/src/eda_worker/powerbi/templates/**
+
+# Lock files and integrity-checked fixtures are byte-stable.
+*.lock.json
+**/*.lock.json
+tests/fixtures/**
+services/worker/tests/fabric/fixtures/**
+services/worker/tests/fixtures/**
+
+# Static data map.
+scripts/rbac-assignments.json

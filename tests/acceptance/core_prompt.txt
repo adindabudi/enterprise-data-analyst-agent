@@ -1,0 +1,1 @@
+Analyze the generated FY2026 regional revenue workbook. Produce a validated workbook, a self-contained HTML summary, a chart in SVG and PNG, an editable Mermaid flow with SVG and PNG renders, a task manifest, and a reproducibility bundle. State the exact FY2026 control total and cite resolvable evidence.

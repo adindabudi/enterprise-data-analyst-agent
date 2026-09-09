@@ -1,0 +1,22 @@
+[
+  {"id":"prose-01","kind":"prose","text":"Revenue increased in the synthetic north region during the first quarter."},
+  {"id":"prose-02","kind":"prose","text":"Explain the variance using only the supplied test artifacts and cite the source IDs."},
+  {"id":"prose-03","kind":"prose","text":"The requested report contains a summary, a chart, and a validation note."},
+  {"id":"prose-04","kind":"prose","text":"A conservative budget keeps context trimming predictable for long analysis runs."},
+  {"id":"json-01","kind":"json","text":"{\"region\":\"north\",\"revenue\":420,\"currency\":\"USD\"}"},
+  {"id":"json-02","kind":"json","text":"{\"status\":\"completed\",\"checkpointSequence\":7}"},
+  {"id":"json-03","kind":"json","text":"{\"artifactId\":\"input-12345678\",\"version\":1}"},
+  {"id":"json-04","kind":"json","text":"{\"tool\":\"validate_artifact\",\"result\":\"ok\"}"},
+  {"id":"python-01","kind":"python","text":"total = sum(values)\nprint(total)"},
+  {"id":"python-02","kind":"python","text":"for row in rows:\n    if row['value'] > 0:\n        keep.append(row)"},
+  {"id":"python-03","kind":"python","text":"def ratio(actual, budget):\n    return actual / budget if budget else 0"},
+  {"id":"python-04","kind":"python","text":"report = {'title': 'Synthetic variance', 'rows': 12}"},
+  {"id":"table-01","kind":"table","text":"Region | Revenue | Budget\nNorth | 420 | 400\nSouth | 380 | 390"},
+  {"id":"table-02","kind":"table","text":"Month | Units\nJan | 10\nFeb | 12\nMar | 11"},
+  {"id":"table-03","kind":"table","text":"Metric | Value\nMargin | 0.42\nGrowth | 0.08"},
+  {"id":"table-04","kind":"table","text":"Category | Count\nApproved | 9\nPending | 2"},
+  {"id":"tool-01","kind":"tool_result","text":"inspect_artifact: schema valid; rows=12; missing_values=0"},
+  {"id":"tool-02","kind":"tool_result","text":"execute_in_sandbox: exit_code=0; stdout_bytes=84"},
+  {"id":"tool-03","kind":"tool_result","text":"validate_artifact: checks_passed=5; checks_failed=0"},
+  {"id":"tool-04","kind":"tool_result","text":"publish_artifact: artifact=result-12345678; version=1"}
+]

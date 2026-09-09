@@ -1,0 +1,12 @@
+.git
+.env*
+.azure
+.artifacts
+**/__pycache__
+**/*.pyc
+node_modules
+apps
+services/worker
+tests
+docs
+*.md

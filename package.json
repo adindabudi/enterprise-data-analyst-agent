@@ -1,0 +1,35 @@
+{
+  "name": "enterprise-data-analyst",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x",
+    "npm": ">=11.6.2 <12"
+  },
+  "workspaces": [
+    "apps/web",
+    "packages/contracts/typescript"
+  ],
+  "scripts": {
+    "contracts:generate": "node scripts/generate-contracts.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.61.1",
+    "eslint": "10.7.0",
+    "json-schema-to-typescript": "15.0.4",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0"
+  },
+  "dependencies": {
+    "roboto-fontface": "0.10.0"
+  }
+}
