@@ -10,6 +10,7 @@ import {
   listSessionTodos,
   listTaskArtifacts,
   readTaskProvenance,
+  readAnalysisHistory,
   streamInteractiveChat,
   steerAnalysis,
   uploadAnalysisInput,
@@ -23,6 +24,76 @@ afterEach(() => {
 });
 
 describe("analysis API", () => {
+  it("decodes genuine saved query steps in conversation history", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        jsonResponse(
+          {
+            messages: [
+              {
+                messageId: "msg_history_12345678",
+                role: "user",
+                text: "Berapa jumlah sumur?",
+                createdAt: "2026-09-15T01:00:00Z",
+                taskId: null,
+                steps: [
+                  {
+                    stepId: "run-query-1",
+                    kind: "gql",
+                    label: "Read wells",
+                    state: "completed",
+                    query: "MATCH (w:Well) RETURN count(*) AS wells",
+                    source: "indonesia-upstream",
+                    querySha256: "a".repeat(64),
+                    resultSha256: "b".repeat(64),
+                    rowCount: "1",
+                    executedAt: "2026-09-15T01:00:01Z",
+                  },
+                ],
+              },
+            ],
+            tasks: [],
+          },
+          200,
+        ),
+      ),
+    );
+    const history = await readAnalysisHistory("ses_history_12345678");
+    expect(history.messages[0]?.steps?.[0]).toMatchObject({
+      source: "indonesia-upstream",
+      rowCount: 1,
+      executedAt: "2026-09-15T01:00:01Z",
+    });
+  });
+
+  it("reports malformed saved provenance instead of returning an empty query list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        jsonResponse(
+          {
+            messages: [
+              {
+                messageId: "msg_history_12345678",
+                role: "user",
+                text: "Berapa jumlah sumur?",
+                createdAt: "2026-09-15T01:00:00Z",
+                taskId: null,
+                steps: [{ query: "not a complete query record" }],
+              },
+            ],
+            tasks: [],
+          },
+          200,
+        ),
+      ),
+    );
+    await expect(readAnalysisHistory("ses_history_12345678")).rejects.toThrow(
+      "Saved query provenance is invalid",
+    );
+  });
+
   it("uploads real bytes with CSRF and checks the authoritative scan state", async () => {
     document.cookie = "eda_csrf=csrf-value; Path=/";
     const fetchMock = vi

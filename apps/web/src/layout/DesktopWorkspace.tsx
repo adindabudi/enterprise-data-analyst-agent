@@ -35,7 +35,7 @@ import {
 } from "../chat/ActivityBlock";
 import { Composer, type ComposerRequest } from "../chat/Composer";
 import { Conversation, type NarrativeMessage } from "../chat/Conversation";
-import { readDataStep, type DataStep } from "../chat/DataSteps";
+import { mergeDataSteps, readDataStep, type DataStep } from "../chat/DataSteps";
 import { threadTitle } from "../chat/thread-title";
 import { useAnalysisUpload } from "../chat/useAnalysisUpload";
 import {
@@ -179,13 +179,20 @@ export function DesktopWorkspace({
     interactiveAbort.current = null;
     setActiveSessionId(session.sessionId);
     setSessionTitle(session.title);
-    setMessages(
-      saved.messages.map((message) => ({
+    setMessages((previous) => {
+      const observed = new Map(
+        previous.map((message) => [message.id, message.steps ?? []]),
+      );
+      return saved.messages.map((message) => ({
         id: message.messageId,
         role: message.role,
         text: message.text,
-      })),
-    );
+        steps: mergeDataSteps(
+          message.steps ?? [],
+          observed.get(message.messageId) ?? [],
+        ),
+      }));
+    });
     setStreamedText("");
     taskView.current = initialTaskView();
     setFabricAuthAction(undefined);

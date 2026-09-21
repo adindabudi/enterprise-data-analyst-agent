@@ -74,7 +74,11 @@ try {
   await page.setContent('<main id="diagram"></main>');
   await page.addScriptTag({ path: mermaidBundle });
   const svg = await page.evaluate(
-    async ({ config, definition }) => {
+    async ({ config, definition, background }) => {
+      if (!globalThis.CSS.supports("color", background))
+        throw new Error("backgroundColor must be a valid CSS color");
+      globalThis.document.body.style.margin = "0";
+      globalThis.document.body.style.backgroundColor = background;
       globalThis.mermaid.initialize({
         startOnLoad: false,
         ...config,
@@ -85,10 +89,17 @@ try {
         definition,
       );
       globalThis.document.querySelector("#diagram").innerHTML = rendered.svg;
+      const element = globalThis.document.querySelector("#diagram svg");
+      if (!element) throw new Error("Mermaid did not render an SVG element");
+      element.style.backgroundColor = background;
       await globalThis.document.fonts.ready;
-      return rendered.svg;
+      return element.outerHTML;
     },
-    { config: mermaidConfig, definition: source },
+    {
+      config: mermaidConfig,
+      definition: source,
+      background: values.backgroundColor,
+    },
   );
 
   if (format === "svg") {

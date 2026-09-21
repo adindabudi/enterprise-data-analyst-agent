@@ -8,10 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Any, cast
 
-import pdfplumber
-import pypdfium2
 from pypdf import PdfReader
 
 type PageRenderer = Callable[[bytes, int], bytes]
@@ -33,11 +30,8 @@ def validate_pdf(payload: bytes, *, renderer: PageRenderer | None = None) -> Pdf
         page_count = len(reader.pages)
         if page_count < 1:
             return PdfValidationReport(passed=False, failures=("PDF contains no pages.",))
-        with pdfplumber.open(BytesIO(payload)) as document:
-            if len(document.pages) != page_count:
-                return PdfValidationReport(passed=False, failures=("PDF page count is inconsistent.",))
-            for page in document.pages:
-                page.extract_text()
+        for page in reader.pages:
+            page.extract_text()
     except Exception:
         return PdfValidationReport(passed=False, failures=("PDF xref or startxref is unreadable.",))
 
@@ -54,7 +48,7 @@ def validate_pdf(payload: bytes, *, renderer: PageRenderer | None = None) -> Pdf
 def render_page_with_poppler(payload: bytes, page_number: int) -> bytes:
     executable = shutil.which("pdftoppm")
     if executable is None:
-        return render_page_with_pdfium(payload, page_number)
+        raise ValueError("PDF rendering requires pdftoppm (Poppler).")
     with tempfile.TemporaryDirectory() as temporary_directory:
         directory = Path(temporary_directory)
         source = directory / "document.pdf"
@@ -73,27 +67,9 @@ def render_page_with_poppler(payload: bytes, page_number: int) -> bytes:
             ],
             check=True,
             capture_output=True,
+            timeout=60,
         )
         rendered_pages = sorted(directory.glob("page-*.png"))
         if len(rendered_pages) != 1:
             raise ValueError("Poppler did not render exactly one PDF page.")
         return rendered_pages[0].read_bytes()
-
-
-def render_page_with_pdfium(payload: bytes, page_number: int) -> bytes:
-    document = pypdfium2.PdfDocument(payload)
-    try:
-        if not 0 <= page_number < len(document):
-            raise ValueError("PDF page number is out of range.")
-        page = document[page_number]
-        try:
-            # pypdfium2 ships no type stubs; type the render boundary explicitly.
-            bitmap: Any = cast("Any", page).render(scale=1.5)
-            image: Any = bitmap.to_pil()
-            output = BytesIO()
-            image.save(output, format="PNG")
-            return output.getvalue()
-        finally:
-            page.close()
-    finally:
-        document.close()

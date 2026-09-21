@@ -19,8 +19,7 @@ def test_worker_image_is_remote_built_scanned_and_persisted_by_digest() -> None:
     assert 'documents_enabled="${DOCUMENTS_ENABLED:-$(azd_optional_value DOCUMENTS_ENABLED)}"' in source
     assert 'documents_enabled="${documents_enabled:-false}"' in source
     assert (
-        'document_terms_accepted='
-        '"${EDA_DOCUMENT_TERMS_ACCEPTED:-$(azd_optional_value EDA_DOCUMENT_TERMS_ACCEPTED)}"'
+        'document_terms_accepted="${EDA_DOCUMENT_TERMS_ACCEPTED:-$(azd_optional_value EDA_DOCUMENT_TERMS_ACCEPTED)}"'
     ) in source
     assert '--build-arg "EDA_DOCUMENT_TERMS_ACCEPTED=${document_terms_accepted}"' in source
     assert "trivy image --image-src remote --platform linux/amd64" in source

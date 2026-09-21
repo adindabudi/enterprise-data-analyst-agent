@@ -65,7 +65,8 @@ async def test_checkpoint_exact_replay_returns_committed_state(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("backend", ["memory", "cosmos"])
 async def test_output_contract_is_write_once(
-    task: TaskRecord, backend: str,
+    task: TaskRecord,
+    backend: str,
 ) -> None:
     if backend == "cosmos":
         container = FakeCosmosTaskContainer(task)
@@ -83,12 +84,22 @@ async def test_output_contract_is_write_once(
     restored = await repository.resolve_task(task.id)
     assert restored is not None and restored.required_outputs == requirements
 
-    command = await repository.append_command(
-        task.partition(), task.id, CommandKind.STEER, "Only HTML now", "steer-output-12345678",
-    ) if backend == "memory" else None
+    command = (
+        await repository.append_command(
+            task.partition(),
+            task.id,
+            CommandKind.STEER,
+            "Only HTML now",
+            "steer-output-12345678",
+        )
+        if backend == "memory"
+        else None
+    )
     if command is not None:
         steered = await repository.ensure_required_outputs(
-            task.id, (RequiredOutput(kind=ArtifactKind.HTML),), through_sequence=command.sequence,
+            task.id,
+            (RequiredOutput(kind=ArtifactKind.HTML),),
+            through_sequence=command.sequence,
         )
         assert steered.required_outputs == (RequiredOutput(kind=ArtifactKind.HTML),)
         stale = await repository.ensure_required_outputs(task.id, requirements)
@@ -411,7 +422,9 @@ async def test_initial_dispatch_cannot_claim_terminal_tasks(task: TaskRecord, ba
 async def test_abandoned_initial_dispatch_cannot_attach_a_late_attempt(task: TaskRecord, backend: str) -> None:
     seeded = task.model_copy(update={"initial_dispatch_claimed": True})
     repository = await dispatch_repository(seeded, backend)
-    failed = await repository.fail_abandoned_initial_dispatch(task.id, stale_before=task.updated_at + timedelta(seconds=1))
+    failed = await repository.fail_abandoned_initial_dispatch(
+        task.id, stale_before=task.updated_at + timedelta(seconds=1)
+    )
 
     assert failed.status is TaskStatus.FAILED
     assert failed.initial_dispatch_claimed
@@ -422,9 +435,13 @@ async def test_abandoned_initial_dispatch_cannot_attach_a_late_attempt(task: Tas
 
 
 @pytest.mark.parametrize("backend", ["memory", "cosmos"])
-@pytest.mark.parametrize("updates", [{}, {"active_attempt_id": "resp_already_attached"}, {"status": TaskStatus.ANALYZING}])
+@pytest.mark.parametrize(
+    "updates", [{}, {"active_attempt_id": "resp_already_attached"}, {"status": TaskStatus.ANALYZING}]
+)
 @pytest.mark.asyncio
-async def test_initial_dispatch_recovery_preserves_recent_or_running_tasks(task: TaskRecord, backend: str, updates) -> None:
+async def test_initial_dispatch_recovery_preserves_recent_or_running_tasks(
+    task: TaskRecord, backend: str, updates
+) -> None:
     seeded = task.model_copy(update={"initial_dispatch_claimed": True, **updates})
     repository = await dispatch_repository(seeded, backend)
     before = await repository.resolve_task(task.id)
@@ -440,7 +457,9 @@ async def test_cosmos_initial_dispatch_recovery_preserves_a_concurrent_attempt(t
     container.conflict_attempt_winner = "resp_concurrent_attempt"
     repository = CosmosRuntimeStateRepository(container, container)
 
-    recovered = await repository.fail_abandoned_initial_dispatch(task.id, stale_before=task.updated_at + timedelta(seconds=1))
+    recovered = await repository.fail_abandoned_initial_dispatch(
+        task.id, stale_before=task.updated_at + timedelta(seconds=1)
+    )
 
     assert recovered.active_attempt_id == "resp_concurrent_attempt"
     assert recovered.status is TaskStatus.PLANNING

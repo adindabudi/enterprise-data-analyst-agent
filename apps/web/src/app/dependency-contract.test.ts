@@ -17,8 +17,8 @@ describe("frontend dependency contract", () => {
     expect(lock.packages["node_modules/@fluentui/react-icons"]?.version).toBe(
       "2.0.333",
     );
-    expect(lock.packages["node_modules/dompurify"]?.version).toBe("3.4.12");
-    expect(lock.packages["node_modules/mermaid"]?.version).toBe("11.16.0");
+    expect(lock.packages["node_modules/dompurify"]?.version).toBe("3.4.14");
+    expect(lock.packages["node_modules/mermaid"]?.version).toBe("11.17.2");
     expect(lock.packages["node_modules/@azure/msal-browser"]).toBeUndefined();
     expect(lock.packages["node_modules/@azure/msal-react"]).toBeUndefined();
   });

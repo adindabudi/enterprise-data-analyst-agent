@@ -11,7 +11,7 @@ from .settings import IMPORTS, OUTPUTS, SOURCES, TEMP, WORKSPACE
 def prepare_workspace() -> None:
     if os.getuid() == 0 or os.getgid() == 0:
         raise RuntimeError("sandbox must not run as root")
-    for directory in (WORKSPACE, IMPORTS, SOURCES, OUTPUTS, TEMP, WORKSPACE / "home", WORKSPACE / ".matplotlib"):
+    for directory in (WORKSPACE, IMPORTS, SOURCES, OUTPUTS, TEMP, WORKSPACE / "home"):
         directory.mkdir(parents=True, exist_ok=True)
     probe = WORKSPACE / ".write-probe"
     try:

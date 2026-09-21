@@ -139,8 +139,16 @@ it.each([
     expect(
       await screen.findByRole("button", { name: /^Tasks/ }),
     ).toHaveAttribute("aria-expanded", "true");
-    if (layout === "mobile")
-      await user.click(screen.getByRole("button", { name: "Close workspace" }));
+    if (layout === "mobile") {
+      await user.click(
+        await screen.findByRole("button", { name: "Close workspace" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Workspace details" }),
+        ).not.toBeInTheDocument(),
+      );
+    }
 
     await user.type(
       screen.getByRole("textbox", { name: "Analysis request" }),
@@ -164,7 +172,14 @@ it.each([
       expect(
         screen.getByRole("button", { name: "Saved occupancy" }),
       ).toBeVisible();
-      await user.click(screen.getByRole("button", { name: "Close analyses" }));
+      await user.click(
+        await screen.findByRole("button", { name: "Close analyses" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Analyses drawer" }),
+        ).not.toBeInTheDocument(),
+      );
       await user.click(screen.getByRole("button", { name: "Open workspace" }));
     } else {
       await waitFor(() =>

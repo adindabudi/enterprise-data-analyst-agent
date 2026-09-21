@@ -1,4 +1,5 @@
 import type { TaskSummary } from "@eda/contracts";
+import { readStoredDataSteps, type DataStep } from "../chat/data-step";
 
 export type AnalysisIdentity = {
   sessionId: string;
@@ -144,6 +145,7 @@ export type SessionMessage = {
   text: string;
   createdAt: string;
   taskId: string | null;
+  steps?: DataStep[];
 };
 
 export type SessionTask = {
@@ -242,6 +244,7 @@ export async function readAnalysisHistory(
     )
       throw new Error("Session message is invalid");
     readIdentifier(message, "messageId", MESSAGE_PATTERN);
+    message.steps = readStoredDataSteps(message.steps);
   }
   for (const task of value.tasks as unknown[]) {
     if (

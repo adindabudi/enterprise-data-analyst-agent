@@ -8,7 +8,7 @@ import {
   type SourceQuery,
 } from "../api/analysis";
 import type { NarrativeMessage } from "../chat/Conversation";
-import type { DataStep } from "../chat/DataSteps";
+import { mergeDataSteps, type DataStep } from "../chat/DataSteps";
 
 type QueryGroup = {
   id: string;
@@ -48,6 +48,9 @@ export function QueryProvenance({
     }
   }
   if (current) current.steps.push(...liveSteps);
+  for (const group of groups.values()) {
+    group.steps = mergeDataSteps(group.steps);
+  }
   for (const query of queries) {
     const key = query.messageId ?? "unattributed";
     let group = groups.get(key);
@@ -66,7 +69,13 @@ export function QueryProvenance({
     (group) => group.steps.length || group.queries.length,
   );
   if (visibleGroups.length === 0)
-    return showEmpty ? <Text>No queries yet.</Text> : null;
+    return showEmpty ? (
+      <Text>
+        {messages.some((message) => message.role === "assistant")
+          ? "No query records are available for this saved conversation."
+          : "No queries yet."}
+      </Text>
+    ) : null;
   return (
     <>
       {visibleGroups.map((group) => (
@@ -100,7 +109,20 @@ export function QueryProvenance({
                           ? `Read data from ${step.source}`
                           : `Read ${String(step.rowCount)} row${step.rowCount === 1 ? "" : "s"} from ${step.source}`}
                   </Text>
-                  <pre className="query-text">{step.query}</pre>
+                  <pre className="query-text">
+                    {step.query || "(empty query request)"}
+                  </pre>
+                  {step.queryTruncated && (
+                    <Text size={200}>
+                      Request text is truncated for display; its hash
+                      identifies the full submitted request.
+                    </Text>
+                  )}
+                  {step.executedAt && (
+                    <Text size={200}>
+                      {new Date(step.executedAt).toLocaleString()}
+                    </Text>
+                  )}
                   {step.kind === "ontology_search" && (
                     <Text size={200}>
                       Fabric translates this question; its generated query is
@@ -112,6 +134,12 @@ export function QueryProvenance({
                     query SHA-256 {step.querySha256.slice(0, 12)}
                     {"\u2026"}
                   </Text>
+                  {step.resultSha256 && (
+                    <Text size={200}>
+                      rows SHA-256 {step.resultSha256.slice(0, 12)}
+                      {"\u2026"}
+                    </Text>
+                  )}
                 </div>
               ))}
             {group.queries.map((query) => {

@@ -130,3 +130,43 @@ def test_bicep_exports_the_document_contract_deployment_identity() -> None:
     template = build_bicep_template(ROOT / "infra/bicep")
 
     assert template["outputs"]["EDA_DEPLOYMENT_ID"]["value"] == "[variables('configurationHash')]"
+
+
+def test_bicep_output_aliases_match_deployment_hook_inputs() -> None:
+    outputs = build_bicep_template(ROOT / "infra/bicep")["outputs"]
+    spec = importlib.util.spec_from_file_location("sync_bicep_outputs", ROOT / "scripts/sync-bicep-outputs.py")
+    assert spec is not None and spec.loader is not None
+    synchronizer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(synchronizer)
+    updates = synchronizer.environment_updates({name: value["value"] for name, value in outputs.items()})
+    aliases = {
+        "API_URL": "appUrl",
+        "API_APP_ID": "apiAppId",
+        "CLEANUP_JOB_ID": "cleanupJobId",
+        "FABRIC_ACCEPTANCE_JOB_ID": "fabricAcceptanceJobId",
+        "DEPLOYMENT_ID": "deploymentId",
+        "CONTAINER_REGISTRY_ID": "containerRegistryId",
+        "CONTAINER_REGISTRY_LOGIN_SERVER": "containerRegistryLoginServer",
+        "COSMOS_ACCOUNT_ID": "cosmosAccountId",
+        "COSMOS_ENDPOINT": "cosmosEndpoint",
+        "STORAGE_ACCOUNT_ID": "storageAccountId",
+        "STORAGE_BLOB_ENDPOINT": "storageBlobEndpoint",
+        "REDIS_CLUSTER_ID": "redisClusterId",
+        "REDIS_HOSTNAME": "redisHostname",
+        "REDIS_PORT": "redisPort",
+        "WEB_IDENTITY_PRINCIPAL_ID": "webIdentityPrincipalId",
+        "WORKER_IDENTITY_CLIENT_ID": "workerIdentityClientId",
+        "WORKER_IDENTITY_PRINCIPAL_ID": "workerIdentityPrincipalId",
+        "SESSION_INIT_IDENTITY_ID": "sessionInitIdentityId",
+        "SANDBOX_SUBNET_ID": "sandboxSubnetId",
+        "FOUNDRY_AGENT_SUBNET_ID": "foundryAgentSubnetId",
+        "CONTAINER_APPS_ENVIRONMENT_ID": "containerAppsEnvironmentId",
+        "EDA_FOUNDRY_PROJECT_ENDPOINT": "projectEndpoint",
+        "EDA_FOUNDRY_RESOURCE_ENDPOINT": "foundryResourceEndpoint",
+        "EDA_FOUNDRY_MODEL_DEPLOYMENT": "modelDeploymentName",
+    }
+
+    assert set(aliases) == set(updates)
+    for alias, original in aliases.items():
+        assert updates[alias] == str(outputs[original]["value"]), alias
+    assert outputs["AZURE_RESOURCE_GROUP"]["value"] == "[parameters('resourceGroupName')]"

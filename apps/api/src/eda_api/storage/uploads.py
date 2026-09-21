@@ -148,7 +148,7 @@ class AzureBlobStore:
             stream = await blob.download_blob(
                 etag=record.blob_etag,
                 match_condition=MatchConditions.IfNotModified,
-                if_tags_match_condition=f'"{SCAN_RESULT_TAG}" = \'{CLEAN}\'',
+                if_tags_match_condition=f"\"{SCAN_RESULT_TAG}\" = '{CLEAN}'",
                 max_concurrency=1,
                 decompress=False,
             )

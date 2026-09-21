@@ -151,7 +151,9 @@ async def test_clean_upload_read_is_owner_and_session_scoped(
 
 
 @pytest.mark.asyncio
-async def test_clean_upload_returns_the_server_verified_bytes(scanned_uploads: tuple[UploadService, ScannedBlobStore]) -> None:
+async def test_clean_upload_returns_the_server_verified_bytes(
+    scanned_uploads: tuple[UploadService, ScannedBlobStore],
+) -> None:
     service, blobs = scanned_uploads
     content = b"value\n42\n"
     record = await service.create_quarantine_upload(OWNER, SESSION_ID, "data.csv", chunks([content]))
@@ -234,9 +236,7 @@ async def test_replaced_blob_cannot_reuse_a_clean_scan(scanned_uploads: tuple[Up
     content = b"value\n42\n"
     record = await service.create_quarantine_upload(OWNER, SESSION_ID, "data.csv", chunks([content]))
     await blobs.delete(record.blob_name)
-    await blobs.upload(
-        record.blob_name, chunks([content]), {"uploadId": record.id, "sessionId": record.session_id}
-    )
+    await blobs.upload(record.blob_name, chunks([content]), {"uploadId": record.id, "sessionId": record.session_id})
     blobs.scan_result = "No threats found"
 
     with pytest.raises(UploadRejected, match="identity or digest"):

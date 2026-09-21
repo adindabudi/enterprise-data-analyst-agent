@@ -301,7 +301,9 @@ async def test_uploaded_inputs_reach_the_harness_without_fabricated_queries(can_
             return task if task_id == task.id else None
 
     class Messages:
-        async def load_canonical(self, partition: SessionPartition, message_ids: Sequence[str]) -> list[CanonicalMessage | None]:
+        async def load_canonical(
+            self, partition: SessionPartition, message_ids: Sequence[str]
+        ) -> list[CanonicalMessage | None]:
             raise AssertionError("uploads must not fabricate canonical source messages")
 
     repository = RuntimeTaskStateRepository(Runtime(), Messages())

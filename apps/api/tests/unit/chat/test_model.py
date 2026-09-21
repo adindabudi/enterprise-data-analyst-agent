@@ -961,7 +961,10 @@ async def test_missing_schema_does_not_offer_ungrounded_fabric_tools(schema_fail
     agent = FakeAgent()
     graph = GraphQuery()
     _, updates = await graph_turn(
-        graph, agent=agent, fabric=MissingSchema(), idempotency_key="missing-schema",
+        graph,
+        agent=agent,
+        fabric=MissingSchema(),
+        idempotency_key="missing-schema",
     )
 
     names = {getattr(item, "name", None) for item in agent.calls[0]["tools"]}
@@ -1053,7 +1056,8 @@ async def test_a_graph_read_reports_the_exact_statement_it_ran() -> None:
 
     steps = data_steps(updates)
     assert [step["state"] for step in steps] == ["running", "completed"]
-    assert {step["stepId"] for step in steps} == {"step-1"}
+    assert len({step["stepId"] for step in steps}) == 1
+    assert steps[0]["stepId"].endswith(":step-1")
     # The panel claims this is what ran, so a paraphrase would make the claim false.
     assert steps[1]["query"] == GRAPH_QUERY
     assert steps[1]["kind"] == "gql"

@@ -1,5 +1,15 @@
 .git
 .venv
+.env
+.env.*
+.coverage
+.coverage.*
+.ruff_cache/
+.vscode/
+.idea/
+docs/superpowers/
+playwright-report/
+test-results/
 **/__pycache__
 **/.pytest_cache
 **/node_modules

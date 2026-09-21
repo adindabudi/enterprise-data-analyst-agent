@@ -57,8 +57,15 @@ class RequiredOutput(RuntimeModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal[
-        ArtifactKind.HTML, ArtifactKind.XLSX, ArtifactKind.XLSM, ArtifactKind.DOCX,
-        ArtifactKind.PPTX, ArtifactKind.PDF, ArtifactKind.PNG, ArtifactKind.SVG, ArtifactKind.MERMAID,
+        ArtifactKind.HTML,
+        ArtifactKind.XLSX,
+        ArtifactKind.XLSM,
+        ArtifactKind.DOCX,
+        ArtifactKind.PPTX,
+        ArtifactKind.PDF,
+        ArtifactKind.PNG,
+        ArtifactKind.SVG,
+        ArtifactKind.MERMAID,
     ]
     minimum_count: int = Field(default=1, ge=1, le=10)
 

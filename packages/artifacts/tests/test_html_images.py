@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import io
+import struct
+import zlib
 
+import png
 import pytest
 from eda_artifacts.html import validate_html, validate_web_artifact_html
 from eda_artifacts.images import validate_png, validate_svg
-from PIL import Image
 
 
 @pytest.mark.parametrize(
@@ -102,14 +104,30 @@ def test_svg_allows_standard_namespace_and_local_references() -> None:
 
 def test_png_validation_reports_safe_dimensions() -> None:
     buffer = io.BytesIO()
-    Image.new("RGB", (2, 3)).save(buffer, format="PNG")
+    png.Writer(2, 3, greyscale=False).write(buffer, [[0] * 6] * 3)
 
     assert validate_png(buffer.getvalue()) == (2, 3)
 
 
 def test_png_rejects_trailing_data() -> None:
     buffer = io.BytesIO()
-    Image.new("RGB", (1, 1)).save(buffer, format="PNG")
+    png.Writer(1, 1, greyscale=False).write(buffer, [[0, 0, 0]])
 
     with pytest.raises(ValueError):
         validate_png(buffer.getvalue() + b"unexpected")
+
+
+def png_chunk(kind: bytes, content: bytes) -> bytes:
+    return struct.pack(">I", len(content)) + kind + content + struct.pack(">I", zlib.crc32(kind + content))
+
+
+def test_png_rejects_invalid_compressed_pixels_with_valid_checksums() -> None:
+    payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+        + png_chunk(b"IDAT", b"not-a-zlib-stream")
+        + png_chunk(b"IEND", b"")
+    )
+
+    with pytest.raises(ValueError, match="invalid PNG"):
+        validate_png(payload)

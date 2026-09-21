@@ -23,6 +23,8 @@ RUN python -m pip install --no-cache-dir --require-hashes -r scripts/document-sk
 FROM node:24.12.0-bookworm-slim@sha256:7326fb2dbdce998edd72140946851be64ef4a643e8715e138ca467e8e9d92c99 AS node-tools
 WORKDIR /build
 COPY services/sandbox/package.json services/sandbox/package-lock.json ./
+COPY services/sandbox/.npmrc ./
+COPY services/sandbox/vendor/pptxgenjs ./vendor/pptxgenjs
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm ci --omit=dev --ignore-scripts=false
 
@@ -63,6 +65,7 @@ RUN python -m pip install --no-index --no-cache-dir /wheels/*.whl \
     && mkdir -p /workspace/task \
     && chown -R 10001:10001 /workspace
 ENV NODE_PATH=/opt/eda/node_modules \
+    BROWSER_PATH=/usr/bin/chromium \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

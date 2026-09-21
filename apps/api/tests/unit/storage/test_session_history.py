@@ -36,21 +36,37 @@ async def test_history_survives_reader_recreation_and_stays_owner_scoped() -> No
     session_id = "ses_persistent_12345678"
     now = datetime.now(UTC)
     message = CanonicalMessage(
-        id="msg_persistent_12345678", tenant_id=str(principal.tenant_id),
-        owner_object_id=str(principal.owner_object_id), session_id=session_id,
-        role="user", text="Export occupancy to Excel", created_at=now,
+        id="msg_persistent_12345678",
+        tenant_id=str(principal.tenant_id),
+        owner_object_id=str(principal.owner_object_id),
+        session_id=session_id,
+        role="user",
+        text="Export occupancy to Excel",
+        created_at=now,
     )
     first_task = TaskRecord(
-        id="task_first_12345678", tenant_id=principal.tenant_id, owner_object_id=principal.owner_object_id,
-        session_id=session_id, status=TaskStatus.COMPLETED, checkpoint_sequence=7,
-        command_sequence=0, applied_command_sequence=0, source_message_id=message.id,
-        created_at=now, updated_at=now, expires_at=now + timedelta(days=30),
+        id="task_first_12345678",
+        tenant_id=principal.tenant_id,
+        owner_object_id=principal.owner_object_id,
+        session_id=session_id,
+        status=TaskStatus.COMPLETED,
+        checkpoint_sequence=7,
+        command_sequence=0,
+        applied_command_sequence=0,
+        source_message_id=message.id,
+        created_at=now,
+        updated_at=now,
+        expires_at=now + timedelta(days=30),
     )
     second_task = first_task.model_copy(update={"id": "task_second_12345678", "created_at": now + timedelta(seconds=1)})
-    workspace = StoredWorkspace([
-        second_task.model_dump(mode="json"), message.model_dump(mode="json"), first_task.model_dump(mode="json"),
-        {**message.model_dump(mode="json"), "recordType": "operation", "text": "private tool data"},
-    ])
+    workspace = StoredWorkspace(
+        [
+            second_task.model_dump(mode="json"),
+            message.model_dump(mode="json"),
+            first_task.model_dump(mode="json"),
+            {**message.model_dump(mode="json"), "recordType": "operation", "text": "private tool data"},
+        ]
+    )
 
     history = await CosmosSessionHistoryReader(workspace).read_history(principal, session_id)
     restored = await CosmosSessionHistoryReader(workspace).read_history(principal, session_id)

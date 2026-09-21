@@ -42,14 +42,22 @@ class OutputContract(BaseModel):
 
 class OutputPlanningClient(Protocol):
     def get_response(
-        self, messages: Sequence[Message], *, stream: Literal[False], options: Mapping[str, Any],
+        self,
+        messages: Sequence[Message],
+        *,
+        stream: Literal[False],
+        options: Mapping[str, Any],
     ) -> Awaitable[ChatResponse[Any]]: ...
 
 
 class OutputContractPlanner:
     def __init__(
-        self, client: OutputPlanningClient, repository: RuntimeStateRepository,
-        context: TaskStateRepository, *, model_options: Mapping[str, Any],
+        self,
+        client: OutputPlanningClient,
+        repository: RuntimeStateRepository,
+        context: TaskStateRepository,
+        *,
+        model_options: Mapping[str, Any],
     ) -> None:
         self._client = client
         self._repository = repository
@@ -62,8 +70,11 @@ class OutputContractPlanner:
             raise ValueError("task is unavailable for output planning")
         commands = await self._repository.commands(task_id, list(pending_command_ids)) if pending_command_ids else []
         changes = sorted(
-            (command for command in commands
-             if command.kind is CommandKind.STEER and command.sequence > task.required_outputs_sequence),
+            (
+                command
+                for command in commands
+                if command.kind is CommandKind.STEER and command.sequence > task.required_outputs_sequence
+            ),
             key=lambda command: command.sequence,
         )
         if task.required_outputs is not None and not changes:
@@ -75,12 +86,24 @@ class OutputContractPlanner:
         response = await self._client.get_response(
             [
                 Message(role="system", contents=[OUTPUT_PLANNING_INSTRUCTIONS]),
-                Message(role="user", contents=[json.dumps({
-                    "request": snapshot.confirmed_requirements, "handoff": task.handoff_context,
-                    "current_outputs": [output.model_dump(mode="json") for output in task.required_outputs]
-                    if task.required_outputs is not None else None,
-                    "user_changes": [{"sequence": command.sequence, "text": command.text} for command in changes],
-                }, ensure_ascii=True)]),
+                Message(
+                    role="user",
+                    contents=[
+                        json.dumps(
+                            {
+                                "request": snapshot.confirmed_requirements,
+                                "handoff": task.handoff_context,
+                                "current_outputs": [output.model_dump(mode="json") for output in task.required_outputs]
+                                if task.required_outputs is not None
+                                else None,
+                                "user_changes": [
+                                    {"sequence": command.sequence, "text": command.text} for command in changes
+                                ],
+                            },
+                            ensure_ascii=True,
+                        )
+                    ],
+                ),
             ],
             stream=False,
             options={**self._model_options, "tools": [], "store": False, "response_format": OutputContract},
@@ -91,5 +114,7 @@ class OutputContractPlanner:
         if contract.unsupported_formats:
             raise ValueError("requested output format is unsupported")
         return await self._repository.ensure_required_outputs(
-            task_id, contract.outputs, through_sequence=through_sequence,
+            task_id,
+            contract.outputs,
+            through_sequence=through_sequence,
         )

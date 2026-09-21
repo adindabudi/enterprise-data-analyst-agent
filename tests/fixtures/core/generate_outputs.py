@@ -105,10 +105,7 @@ subprocess.run(  # noqa: S603 -- fixed Chromium argv and generated local SVG URI
 )
 render_ms += int((time.monotonic() - render_started) * 1000)
 
-import matplotlib  # noqa: E402
-
-matplotlib.use("Agg")
-from matplotlib import pyplot as plt  # noqa: E402
+import plotly.graph_objects as go  # noqa: E402
 
 parameters = json.loads(next(INPUTS.glob("*.json")).read_text(encoding="utf-8"))
 random.seed(parameters["randomSeed"])
@@ -148,14 +145,12 @@ html_path.write_text(
 
 regions = [region for region, _ in rows]
 values = [float(revenue) for _, revenue in rows]
-fig, axis = plt.subplots(figsize=(8, 4.5), dpi=120)
-axis.bar(regions, values, color=["#2364aa", "#3da35d", "#f6ae2d"])
-axis.set_title("FY2026 Revenue by Region")
-axis.set_ylabel("USD")
-fig.tight_layout()
-fig.savefig(OUTPUTS / "revenue-chart.png")
-fig.savefig(OUTPUTS / "revenue-chart.svg")
-plt.close(fig)
+figure = go.Figure(go.Bar(x=regions, y=values, marker_color=["#2364aa", "#3da35d", "#f6ae2d"]))
+figure.update_layout(
+    title="FY2026 Revenue by Region", yaxis_title="USD", width=960, height=540, template="plotly_white"
+)
+figure.write_image(OUTPUTS / "revenue-chart.png")
+figure.write_image(OUTPUTS / "revenue-chart.svg")
 
 for name, dimensions in (("report-desktop.png", "1280,720"), ("report-mobile.png", "390,844")):
     render_started = time.monotonic()

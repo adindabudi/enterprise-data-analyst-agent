@@ -243,8 +243,11 @@ async def test_execute_checks_cancellation_first() -> None:
 def test_optional_output_contract_preserves_legacy_operation_key() -> None:
     operation = ExecuteSandboxOperation(runtime=SandboxRuntime.PYTHON, source="print(1)")
     assert DynamicSessionCapabilityGateway._execute_canonical_input(operation) == {
-        "runtime": "python", "source": "print(1)", "inputArtifacts": [],
-        "parameters": {}, "timeoutSeconds": 120,
+        "runtime": "python",
+        "source": "print(1)",
+        "inputArtifacts": [],
+        "parameters": {},
+        "timeoutSeconds": 120,
     }
 
 
@@ -272,7 +275,9 @@ async def test_execute_imports_source_and_persists_output_and_stdout_refs() -> N
     assert len(result.artifact_refs) == 1
     assert len(result.diagnostic_refs) == 1
     assert result.artifact_refs[0].kind is ArtifactKind.HTML
-    payloads = [await store.read_bytes("task_12345678", ref) for ref in (*result.artifact_refs, *result.diagnostic_refs)]
+    payloads = [
+        await store.read_bytes("task_12345678", ref) for ref in (*result.artifact_refs, *result.diagnostic_refs)
+    ]
     assert b"result-bytes" in payloads
     assert b"stdout text" in payloads
 
@@ -296,13 +301,18 @@ async def test_validation_failure_returns_correctable_error_and_report_ref() -> 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("kind", "profile"), [
-    (ArtifactKind.HTML, ToolValidationProfile.WEB_ARTIFACT_HTML),
-    (ArtifactKind.XLSX, ToolValidationProfile.CORE_XLSX),
-    (ArtifactKind.MERMAID, ToolValidationProfile.CORE_MERMAID),
-])
+@pytest.mark.parametrize(
+    ("kind", "profile"),
+    [
+        (ArtifactKind.HTML, ToolValidationProfile.WEB_ARTIFACT_HTML),
+        (ArtifactKind.XLSX, ToolValidationProfile.CORE_XLSX),
+        (ArtifactKind.MERMAID, ToolValidationProfile.CORE_MERMAID),
+    ],
+)
 async def test_gateway_keeps_format_for_the_real_validator(
-    tmp_path: Path, kind: ArtifactKind, profile: ToolValidationProfile,
+    tmp_path: Path,
+    kind: ArtifactKind,
+    profile: ToolValidationProfile,
 ) -> None:
     from eda_sandbox.contracts import ValidationProfile as LocalValidationProfile
     from eda_sandbox.validation import validate_path
@@ -323,9 +333,9 @@ async def test_gateway_keeps_format_for_the_real_validator(
     gateway = DynamicSessionCapabilityGateway(client, FakeRuntimeRepository(_task()), store)
     content = (
         b'<!doctype html><html><head><meta http-equiv="Content-Security-Policy" '
-        b'content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; '
-        b'img-src data: blob:; font-src data:; connect-src \'none\'; object-src \'none\'; '
-        b'base-uri \'none\'; form-action \'none\'"><title>Revenue</title></head><body><h1>Revenue</h1>'
+        b"content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+        b"img-src data: blob:; font-src data:; connect-src 'none'; object-src 'none'; "
+        b"base-uri 'none'; form-action 'none'\"><title>Revenue</title></head><body><h1>Revenue</h1>"
         b"<script>document.body.dataset.ready = 'true';</script></body></html>"
     )
     if kind is ArtifactKind.XLSX:
@@ -360,13 +370,17 @@ async def test_gateway_preserves_generated_format_when_reimporting(kind: Artifac
 @pytest.mark.asyncio
 async def test_execution_requires_declared_outputs_and_separates_diagnostics() -> None:
     gateway = DynamicSessionCapabilityGateway(
-        FakeClient(), FakeRuntimeRepository(_task()), InMemoryArtifactGatewayStore(),
+        FakeClient(),
+        FakeRuntimeRepository(_task()),
+        InMemoryArtifactGatewayStore(),
     )
 
     result = await gateway.execute(
         "task_12345678",
         ExecuteSandboxOperation(
-            runtime=SandboxRuntime.PYTHON, source="print('done')", expected_outputs=("analysis.xlsx",),
+            runtime=SandboxRuntime.PYTHON,
+            source="print('done')",
+            expected_outputs=("analysis.xlsx",),
         ),
     )
 

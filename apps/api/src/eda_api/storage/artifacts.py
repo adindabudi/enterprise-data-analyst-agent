@@ -51,7 +51,8 @@ class InMemoryArtifactCatalog:
         return tuple(
             sorted(
                 (
-                    artifact for (task_id, _, _), (artifact, _) in self._artifacts.items()
+                    artifact
+                    for (task_id, _, _), (artifact, _) in self._artifacts.items()
                     if task_id == task.id and artifact.kind is not ArtifactKind.INPUT
                 ),
                 key=lambda artifact: (artifact.display_name, artifact.artifact_id, artifact.version),

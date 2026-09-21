@@ -1,0 +1,112 @@
+{
+  "reviewDate": "2026-09-14",
+  "scope": "Public evidence for a fictional Indonesia upstream demonstration; no real well observations.",
+  "publicGeology": [
+    {
+      "id": "GEO-01",
+      "title": "Petani horizontal well management strategy - Menggala Formation",
+      "year": 1994,
+      "url": "https://www.ipa.or.id/en/publications/petani-horizontal-well-management-strategy-to-recover-hydrocarbon-in-menggala-formation",
+      "evidence": "Public abstract reports two horizontal completions at 3920 ft TVD, approximately 1195 m TVD.",
+      "limit": "Historical case-specific anchor; vertical datum unspecified. Not TVDSS or a present-day well dataset."
+    },
+    {
+      "id": "GEO-02",
+      "title": "Central Sumatra fluid barriers and wireline formation pressures",
+      "year": 1995,
+      "url": "https://www.ipa.or.id/en/publications/central-sumatra-prospect-evaluation-structural-and-stratigraphic-fluid-barriers-and-hydrodynamic-systems-as-indicated-by-wireline-formation-pressures",
+      "evidence": "Different regional and local depletion behavior supports investigating, rather than assuming, connectivity.",
+      "limit": "Reported depletion magnitudes are not uniform basin-wide inputs to the synthetic generator."
+    },
+    {
+      "id": "GEO-03",
+      "title": "Marginal Minas X-sand productivity enhancement",
+      "year": 2001,
+      "url": "https://www.ipa.or.id/en/publications/propellant-stimulation-technique-provides-alternate-productivity-enhancement-with-cost-reduction-benefits-in-development-of-a-marginal-reservoir-at-minas-field",
+      "evidence": "Case describes approximately 20% porosity, permeability below 15 mD, 20 ft thickness and low resistivity.",
+      "limit": "Reported oil improvement is incremental after treatment, not baseline production or a promised workover outcome."
+    },
+    {
+      "id": "GEO-04",
+      "title": "Gelam reservoir engineering compartmentalization study",
+      "year": 2009,
+      "url": "https://www.ipa.or.id/en/publications/a-reservoir-engineering-study-of-gelam-field-to-understand-compartmentalization",
+      "evidence": "Talang Akar retrograde gas-condensate interpretation changed as pressure, PVT and production evidence developed.",
+      "limit": "Analogue for conflicting interpretations; no assertion that synthetic Rimba measurements belong to Gelam."
+    },
+    {
+      "id": "GEO-05",
+      "title": "Talang Akar low-resistivity evaluation, SCOG 45(3), 169-181",
+      "year": 2022,
+      "url": "https://journal.lemigas.esdm.go.id/index.php/SCOG/article/view/1258",
+      "doi": "10.29017/SCOG.45.3.1258",
+      "evidence": "Study-specific screening includes porosity >14%, permeability >10 mD, Vsh <30%, Sw <70%; saline water contributes to low resistivity.",
+      "limit": "Not universal cutoffs; Sw is not produced water cut. Journal metadata dates are inconsistent; cited by volume year."
+    },
+    {
+      "id": "GEO-06",
+      "title": "Upper Cibulakan seismic amplitude analysis - LES-1",
+      "year": 1995,
+      "url": "https://www.ipa.or.id/en/publications/systematic-application-of-seismic-amplitude-analysis-for-exploration-in-the-upper-cibulakan-formation-example-from-gas-discovery-les-1-offshore-northwest-java",
+      "evidence": "Main/Massive marine sandstones at 800-2000 m subsea; reported gas and condensate rates combine five tested zones.",
+      "limit": "Combined multi-zone test rates are not daily field production. No actual seismic was obtained for this demo."
+    },
+    {
+      "id": "GEO-07",
+      "title": "Upper Cibulakan Main interval sequence stratigraphy - U-11",
+      "year": 1994,
+      "url": "https://www.ipa.or.id/en/publications/a-sequence-stratigraphic-model-of-the-upper-cibulakan-sandstones-main-interval-offshore-northwest-java-basin-insights-from-u-11-well",
+      "evidence": "Sandstone packages approximately 50-100 ft thick, separated by shale sections up to 250 ft.",
+      "limit": "Gross package thickness is not net pay or hydrocarbon volume."
+    }
+  ],
+  "architecture": [
+    {
+      "id": "ARCH-01",
+      "url": "https://github.com/julianjmoreno/EnergyAssetAgent-ADME",
+      "revision": "6df306dc02f77d1e725b5f7426f00a17643eb248",
+      "finding": "Public personal MIT walkthrough combines ADME/OSDU-shaped Fabric data with SharePoint evidence using Copilot Studio. It is not an implemented Foundry IQ/3D viewer application."
+    },
+    {
+      "id": "ARCH-02",
+      "url": "https://learn.microsoft.com/azure/energy-data-services/how-to-connect-analytics-consumption-zone-to-fabric",
+      "finding": "Documented preview ACZ path exports Delta data to ADLS Gen2 and uses OneLake shortcuts. Do not call a synthetic load live ADME mirroring or automatic OSDU ACL propagation."
+    },
+    {
+      "id": "FAB-01",
+      "url": "https://learn.microsoft.com/rest/api/fabric/articles/item-management/definitions/ontology-definition",
+      "finding": "Current REST article documents semanticEnrichment, while older JSON schemas do not fully describe it. Entity synonyms; property/relationship descriptions and attributes."
+    },
+    {
+      "id": "FAB-02",
+      "url": "https://learn.microsoft.com/fabric/iq/ontology/how-to-add-semantic-enrichment",
+      "finding": "Metadata aids contextual understanding but is not directly consumed by ontology query generation; public Data Agent does not currently use relationship enrichment. Keep critical units/grain rules in source instructions."
+    },
+    {
+      "id": "FAB-03",
+      "url": "https://learn.microsoft.com/fabric/iq/ontology/how-to-bind-data",
+      "finding": "Use managed Lakehouse tables with supported primitive types. A dated fact can be a NonTimeSeries entity, making its full history available to GQL."
+    },
+    {
+      "id": "FAB-04",
+      "url": "https://learn.microsoft.com/fabric/graph/gql-query-performance",
+      "finding": "Early filters, explicit labels, bounded traversals and scalar projections. Preserve fact grain independently of query speed."
+    },
+    {
+      "id": "FAB-05",
+      "url": "https://learn.microsoft.com/fabric/graph/manage-data",
+      "finding": "Graph ingestion/refresh is separate from source writes. REST-created Graph requires first portal initialization; source freshness is not automatically graph freshness."
+    },
+    {
+      "id": "FAB-06",
+      "url": "https://learn.microsoft.com/fabric/data-science/data-agent-add-datasources",
+      "finding": "Ontology source does not support source-specific instructions/example queries. Use agent-level instructions; do not invent an ontology datasource REST shape from the graph datasource schema."
+    },
+    {
+      "id": "FAB-07",
+      "url": "https://microsoftlearning.github.io/mslearn-fabric/Instructions/Labs/28-build-data-agent-ontology.html",
+      "finding": "Educational Lamna model is an example, not a domain ontology. The user's deployed Lamna is larger and contains a sixth derived monitoring-signals entity."
+    }
+  ],
+  "syntheticBoundary": "All field names, well identifiers, trajectories, measurements, volumes, events and authored reports are fictional. Public geological anchors do not establish statistically validated basin-wide engineering distributions."
+}

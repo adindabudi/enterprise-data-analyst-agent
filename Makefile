@@ -3,6 +3,16 @@
 bootstrap:
 	uv sync --all-packages --frozen
 	npm ci
+	PUPPETEER_SKIP_DOWNLOAD=true npm --prefix services/sandbox ci --ignore-scripts
+
+.PHONY: source-notices
+source-notices:
+	mkdir -p .artifacts/source-sbom
+	uv export --frozen --all-packages --no-dev --no-emit-workspace --no-hashes --format requirements-txt --output-file .artifacts/source-sbom/requirements.txt >/dev/null
+	uv run python scripts/generate-python-sbom.py --requirements .artifacts/source-sbom/requirements.txt --output .artifacts/source-sbom/python-runtime.cdx.json
+	npm sbom --omit=dev --package-lock-only --sbom-format cyclonedx >.artifacts/source-sbom/web-runtime.cdx.json
+	npm --prefix services/sandbox sbom --omit=dev --package-lock-only --sbom-format cyclonedx >.artifacts/source-sbom/sandbox-runtime.cdx.json
+	uv run python scripts/verify_license_allowlist.py --sbom-dir .artifacts/source-sbom --overrides docs/security/license-overrides.json --notices THIRD_PARTY_NOTICES.md
 
 contracts:
 	uv run python scripts/export-contracts.py

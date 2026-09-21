@@ -6,6 +6,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "ensure-entra-app.sh"
 ROLE_ID = "cc6305dc-7f9b-4f48-9d87-08e1c83f8e72"
@@ -19,7 +21,8 @@ def executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def test_graph_origin_field_does_not_invalidate_stable_branding_role(tmp_path: Path) -> None:
+@pytest.mark.parametrize("existing_role", [True, False])
+def test_graph_origin_field_does_not_invalidate_stable_branding_role(tmp_path: Path, existing_role: bool) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     capture = tmp_path / "roles.json"
@@ -41,6 +44,8 @@ def test_graph_origin_field_does_not_invalidate_stable_branding_role(tmp_path: P
             }
         ],
     }
+    if not existing_role:
+        app["appRoles"] = []
     executable(
         bin_dir / "az",
         """#!/usr/bin/env bash
@@ -87,6 +92,9 @@ exit 0
     )
 
     assert result.returncode == 0, result.stderr
+    if existing_role:
+        assert not capture.exists(), "the stable role must not be rewritten for a read-only Graph field"
+        return
     roles = json.loads(capture.read_text(encoding="utf-8"))
     assert roles == [
         {

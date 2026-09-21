@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import re
@@ -9,18 +8,25 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast
+from uuid import uuid4
 
 from agent_framework import AgentSession, FunctionInvocationContext, FunctionMiddleware, Message, tool
 from eda_runtime_state.messages import CanonicalMessage, MessageRepository, deterministic_message_id
 from eda_runtime_state.models import TaskPartition
 
+from eda_api.chat.provenance import (
+    QUERY_LIMITS,
+    ChatQueryRecord,
+    ChatQueryStep,
+    ChatQueryStore,
+    row_count,
+    sha256,
+)
 from eda_api.chat.sessions import InteractiveSessionStore
 
 ANALYSIS_ROUTING_VERSION = "gpt-5.6-terra-auto-v3"
 # execute_in_sandbox accepts at most ten input artifacts.
 MAX_HANDED_OFF_QUERIES = 10
-# Matches the source's own query limit, so a reported statement is never a truncated one.
-MAX_STEP_QUERY_CHARS = 8_000
 # A failure reason reaches the caller's screen, so it is bounded before it is quoted there.
 MAX_STATUS_DETAIL_CHARS = 200
 ANALYSIS_HANDOFF_DESCRIPTION = (
@@ -171,6 +177,7 @@ class QueryRun:
     source_alias: str | None = None
     # The ledger outlives a turn, so a run has to carry the turn that asked for it.
     message_id: str | None = None
+    kind: Literal["gql", "ontology_search"] | None = None
 
 
 class _QueryLedger:
@@ -192,67 +199,108 @@ class _QueryLedger:
         return tuple(self._runs)
 
 
-@dataclass(frozen=True)
-class _DataStep:
-    step_id: str
-    kind: Literal["gql", "ontology_search"]
-    label: str
-    query: str
-    source: str
-
-
 class _DataStepRecorder:
     """Names every source read of a turn, so an answer can be checked against what produced it."""
 
-    def __init__(self, events: asyncio.Queue[InteractiveChatUpdate | None]) -> None:
+    def __init__(
+        self,
+        events: asyncio.Queue[InteractiveChatUpdate | None],
+        *,
+        store: ChatQueryStore | None = None,
+        partition: TaskPartition | None = None,
+        source_message_id: str | None = None,
+        response_id: str | None = None,
+    ) -> None:
+        if store is not None and (partition is None or source_message_id is None or response_id is None):
+            raise ValueError("durable query provenance requires an owned response binding")
         self._events = events
         self._count = 0
+        self._store = store
+        self._partition = partition
+        self._source_message_id = source_message_id
+        self._response_id = response_id
+        # An interrupted retry is a new execution, not an update to an earlier invocation.
+        self._prefix = f"{response_id}:{uuid4().hex}:" if response_id is not None else ""
+        self._records: dict[str, ChatQueryRecord] = {}
+        self.persistence_failed = False
 
-    async def start(self, *, kind: Literal["gql", "ontology_search"], label: str, query: str, source: str) -> _DataStep:
+    async def start(
+        self, *, kind: Literal["gql", "ontology_search"], label: str, query: str, source: str
+    ) -> ChatQueryStep:
+        if self.persistence_failed:
+            raise RuntimeError("query provenance could not be saved")
         self._count += 1
-        step = _DataStep(step_id=f"step-{self._count}", kind=kind, label=label, query=query, source=source)
-        await self._emit(step, state="running")
+        step = ChatQueryStep(
+            step_id=f"{self._prefix}step-{self._count}",
+            kind=kind,
+            label=label,
+            query=query[: QUERY_LIMITS[kind]],
+            query_truncated=len(query) > QUERY_LIMITS[kind],
+            query_sha256=sha256(query),
+            source=source,
+            started_at=datetime.now(UTC),
+        )
+        if self._store is not None:
+            assert self._partition is not None and self._source_message_id is not None and self._response_id is not None
+            self._records[step.step_id] = ChatQueryRecord(
+                id=f"chat-query:{step.step_id}",
+                tenant_id=str(self._partition.tenant_id),
+                owner_object_id=str(self._partition.owner_object_id),
+                session_id=self._partition.session_id,
+                source_message_id=self._source_message_id,
+                response_id=self._response_id,
+                sequence=self._count,
+                step=step,
+            )
+        await self._emit(step)
         return step
 
-    async def finish(self, step: _DataStep, rows: str) -> None:
-        await self._emit(step, state="completed", rows=rows)
+    async def finish(self, step: ChatQueryStep, rows: str) -> None:
+        await self._emit(
+            ChatQueryStep.model_validate(
+                {
+                    **step.model_dump(),
+                    "state": "completed",
+                    "finished_at": datetime.now(UTC),
+                    "result_sha256": sha256(rows),
+                    "row_count": row_count(rows),
+                }
+            )
+        )
 
-    async def fail(self, step: _DataStep, detail: str) -> None:
-        await self._emit(step, state="failed", detail=detail)
+    async def fail(self, step: ChatQueryStep, detail: str) -> None:
+        await self._emit(
+            ChatQueryStep.model_validate(
+                {**step.model_dump(), "state": "failed", "finished_at": datetime.now(UTC), "detail": detail[:200]}
+            )
+        )
 
-    async def _emit(self, step: _DataStep, *, state: str, rows: str | None = None, detail: str | None = None) -> None:
-        statement = step.query[:MAX_STEP_QUERY_CHARS]
-        data = {
-            "stepId": step.step_id,
-            "kind": step.kind,
-            "label": step.label,
-            "state": state,
-            "query": statement,
-            "source": step.source,
-            "querySha256": hashlib.sha256(statement.encode("utf-8")).hexdigest(),
-        }
-        if rows is not None:
-            data["resultSha256"] = hashlib.sha256(rows.encode("utf-8")).hexdigest()
-            counted = _row_count(rows)
-            if counted is not None:
-                data["rowCount"] = str(counted)
-        if detail is not None:
-            data["detail"] = detail[:MAX_STATUS_DETAIL_CHARS]
-        await self._events.put(InteractiveChatUpdate(event="data_step", data=data))
-
-
-def _row_count(rows: str) -> int | None:
-    """None rather than zero: an aggregate returns one object, and zero would read as no data."""
-    try:
-        parsed: object = json.loads(rows)
-    except json.JSONDecodeError:
-        return None
-    return len(cast(list[object], parsed)) if isinstance(parsed, list) else None
+    async def _emit(self, step: ChatQueryStep) -> None:
+        if self._store is not None:
+            record = self._records[step.step_id].model_copy(update={"step": step})
+            try:
+                if step.state == "running":
+                    await self._store.start(record)
+                else:
+                    persisted = await self._store.finish(record)
+                    if persisted.step != step:
+                        raise ValueError("query provenance already has a different terminal state")
+            except Exception:
+                self.persistence_failed = True
+                logger.exception("durable chat query provenance write failed")
+                raise
+        await self._events.put(InteractiveChatUpdate(event="data_step", data=step.event_data()))
 
 
 def _encode_runs(runs: tuple[QueryRun, ...]) -> list[dict[str, str | None]]:
     return [
-        {"query": run.query, "rows": run.rows, "sourceAlias": run.source_alias, "messageId": run.message_id}
+        {
+            "query": run.query,
+            "rows": run.rows,
+            "sourceAlias": run.source_alias,
+            "messageId": run.message_id,
+            "kind": run.kind,
+        }
         for run in runs
     ]
 
@@ -267,6 +315,7 @@ def _decode_runs(value: object) -> tuple[QueryRun, ...]:
         item = cast(dict[str, object], entry)
         query, rows, alias = item.get("query"), item.get("rows"), item.get("sourceAlias")
         message_id = item.get("messageId")
+        kind = item.get("kind")
         if isinstance(query, str) and isinstance(rows, str):
             runs.append(
                 QueryRun(
@@ -274,6 +323,7 @@ def _decode_runs(value: object) -> tuple[QueryRun, ...]:
                     rows=rows,
                     source_alias=alias if isinstance(alias, str) else None,
                     message_id=message_id if isinstance(message_id, str) else None,
+                    kind=kind if kind in ("gql", "ontology_search") else None,
                 )
             )
     return tuple(runs)
@@ -347,6 +397,7 @@ class MafInteractiveChatService:
         graph_query: GraphQueryService | None = None,
         web_search_tool: Any | None = None,
         session_store: InteractiveSessionStore | None = None,
+        query_store: ChatQueryStore | None = None,
     ) -> None:
         self._agent = agent
         self._messages = messages
@@ -355,6 +406,7 @@ class MafInteractiveChatService:
         self._graph_query = graph_query
         self._web_search_tool = web_search_tool
         self._session_store = session_store
+        self._query_store = query_store
         self.options = dict(options)
 
     async def stream(
@@ -373,6 +425,10 @@ class MafInteractiveChatService:
         if existing is not None:
             if existing.role != "assistant":
                 raise ValueError("interactive response binding is invalid")
+            if self._query_store is not None:
+                for record in await self._query_store.list_response(partition, response_id):
+                    if record.source_message_id == source.id:
+                        yield InteractiveChatUpdate(event="data_step", data=record.step.event_data())
             yield InteractiveChatUpdate(event="delta", data={"text": existing.text})
             yield InteractiveChatUpdate(event="completed", data={"messageId": existing.id})
             return
@@ -394,7 +450,13 @@ class MafInteractiveChatService:
         handoff = _AnalysisHandoff()
         ledger = _QueryLedger(initial=prior_runs)
         events: asyncio.Queue[InteractiveChatUpdate | None] = asyncio.Queue()
-        steps = _DataStepRecorder(events)
+        steps = _DataStepRecorder(
+            events,
+            store=self._query_store,
+            partition=partition,
+            source_message_id=source.id,
+            response_id=response_id,
+        )
         tools: list[Any] = []
         if self._web_search_tool is not None:
             tools.append(self._web_search_tool)
@@ -430,12 +492,17 @@ class MafInteractiveChatService:
                         )
                     )
             else:
-                input_messages.append(Message(role="developer", contents=[
-                    "The configured Fabric source schema is unavailable for this turn, so its query tools "
-                    "are unavailable. Explain this limitation when the request needs that source. Do not guess "
-                    "entity names, properties, or current values, and do not start deep analysis to bypass "
-                    "the unavailable source. Other requests may still use the available tools."
-                ]))
+                input_messages.append(
+                    Message(
+                        role="developer",
+                        contents=[
+                            "The configured Fabric source schema is unavailable for this turn, so its query tools "
+                            "are unavailable. Explain this limitation when the request needs that source. Do not guess "
+                            "entity names, properties, or current values, and do not start deep analysis to bypass "
+                            "the unavailable source. Other requests may still use the available tools."
+                        ],
+                    )
+                )
         if self._analysis_starter is not None:
             tools.append(_analysis_handoff_tool(handoff))
 
@@ -450,6 +517,8 @@ class MafInteractiveChatService:
                     middleware=[_ToolStatusMiddleware(events)],
                     options=self.options,
                 ):
+                    if steps.persistence_failed:
+                        raise RuntimeError("query provenance could not be saved")
                     if handoff.reason is not None:
                         break
                     text = getattr(update, "text", None)
@@ -474,8 +543,21 @@ class MafInteractiveChatService:
         finally:
             if not producer.done():
                 producer.cancel()
-        if stream_failed:
-            yield InteractiveChatUpdate(event="failed", data={"message": "Response failed"})
+                try:
+                    await producer
+                except asyncio.CancelledError:
+                    pass
+        if stream_failed or steps.persistence_failed:
+            yield InteractiveChatUpdate(
+                event="failed",
+                data={
+                    "message": (
+                        "Query provenance could not be saved; this response was stopped."
+                        if steps.persistence_failed
+                        else "Response failed"
+                    )
+                },
+            )
             return
         if handoff.reason is not None:
             if self._analysis_starter is None:
@@ -642,6 +724,7 @@ def _graph_query_tool(
         },
     )
     async def query_graph(query: str) -> dict[str, str]:
+        query = query.strip()
         step = await steps.start(kind="gql", label=f"Queried {alias} graph", query=query, source=alias)
         await events.put(
             InteractiveChatUpdate(
@@ -651,12 +734,15 @@ def _graph_query_tool(
         )
         try:
             rows = await service.execute(partition, query)
+        except asyncio.CancelledError:
+            await steps.fail(step, "Query cancelled; completion was not confirmed.")
+            raise
         except Exception as error:
             logger.exception("interactive graph query failed: %s", error)
             await steps.fail(step, str(error))
             return {"status": "error", "detail": str(error)}
         await steps.finish(step, rows)
-        ledger.record(QueryRun(query=query, rows=rows, message_id=message_id))
+        ledger.record(QueryRun(query=query, rows=rows, source_alias=alias, message_id=message_id, kind="gql"))
         return {"status": "ok", "rows": rows}
 
     return query_graph
@@ -690,11 +776,13 @@ def _fabric_query_tool(
         },
     )
     async def query_fabric(source: str, question: str) -> dict[str, str]:
-        if source != alias:
-            return {"status": "error", "detail": f"unknown source '{source}'; the configured source is '{alias}'"}
         step = await steps.start(
-            kind="ontology_search", label=f"Searched {alias} ontology", query=question, source=alias
+            kind="ontology_search", label=f"Searched {alias} ontology", query=question, source=source
         )
+        if source != alias:
+            detail = f"unknown source '{source}'; the configured source is '{alias}'"
+            await steps.fail(step, detail)
+            return {"status": "error", "detail": detail}
         rows: str | None = None
         try:
             async for update in service.stream(partition, question):
@@ -705,6 +793,9 @@ def _fabric_query_tool(
                     await events.put(InteractiveChatUpdate(event="status", data=status))
                 if update.result is not None:
                     rows = update.result
+        except asyncio.CancelledError:
+            await steps.fail(step, "Query cancelled; completion was not confirmed.")
+            raise
         except Exception:
             logger.exception("interactive Fabric query failed")
             await steps.fail(step, "the Fabric query failed")
@@ -713,7 +804,9 @@ def _fabric_query_tool(
             await steps.fail(step, "the Fabric query returned no rows")
             return {"status": "error", "detail": "the Fabric query returned no rows"}
         await steps.finish(step, rows)
-        ledger.record(QueryRun(query=question, rows=rows, source_alias=alias, message_id=message_id))
+        ledger.record(
+            QueryRun(query=question, rows=rows, source_alias=alias, message_id=message_id, kind="ontology_search")
+        )
         return {"status": "ok", "rows": rows}
 
     return query_fabric

@@ -66,7 +66,7 @@ def test_foundry_project_identity_can_pull_the_hosted_agent_image() -> None:
 def test_foundry_project_identity_can_use_the_account_runtime() -> None:
     foundry = read("infra/terraform/modules/foundry/main.tf")
 
-    assert 'foundry_user_role' in foundry
+    assert "foundry_user_role" in foundry
     assert 'resource "azurerm_role_assignment" "project_foundry_user"' in foundry
     assert "principal_id       = azapi_resource.project.output.identity.principalId" in foundry
     assert "scope              = azapi_resource.account.id" in foundry

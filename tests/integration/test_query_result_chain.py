@@ -20,7 +20,8 @@ from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.storage.query_results import CosmosBlobQueryResultWriter
 from eda_api.task_service import TaskService
 from eda_runtime_state.messages import CanonicalMessage, InMemoryMessageRepository
-from eda_runtime_state.models import TaskPartition, TaskRecord
+from eda_runtime_state.models import TaskPartition
+from eda_runtime_state.tasks import InMemoryRuntimeStateRepository
 from eda_worker.context.repository import RuntimeTaskStateRepository
 from eda_worker.context.task_state import TaskStateContextProvider
 from eda_worker.history.models import SessionPartition
@@ -81,37 +82,6 @@ class Workspace:
         self.items[str(body["id"])] = body
 
 
-class Runtime:
-    def __init__(self) -> None:
-        self.tasks: dict[str, TaskRecord] = {}
-
-    async def create_task(self, task: TaskRecord, idempotency_key: str) -> TaskRecord:
-        del idempotency_key
-        self.tasks[task.id] = task
-        return task
-
-    async def resolve_task(self, task_id: str) -> TaskRecord | None:
-        return self.tasks.get(task_id)
-
-    async def replace_active_attempt(
-        self,
-        task_id: str,
-        attempt_id: str,
-        *,
-        expected_attempt_id: str | None,
-    ) -> TaskRecord:
-        task = self.tasks[task_id]
-        if task.active_attempt_id != expected_attempt_id:
-            raise ValueError("active attempt changed")
-        updated = task.model_copy(update={"active_attempt_id": attempt_id})
-        self.tasks[task_id] = updated
-        return updated
-
-    async def get_owned_task(self, partition: TaskPartition, task_id: str) -> TaskRecord | None:
-        task = self.tasks.get(task_id)
-        return task if task is not None and task.partition() == partition else None
-
-
 class Hosted:
     def __init__(self) -> None:
         self.started: list[str] = []
@@ -144,11 +114,11 @@ class Context:
 
 @pytest.mark.asyncio
 async def test_rows_read_in_chat_reach_the_hosted_agent_as_a_file_it_can_open() -> None:
-    workspace, blobs, runtime, hosted = Workspace(), Blobs(), Runtime(), Hosted()
+    workspace, blobs, runtime, hosted = Workspace(), Blobs(), InMemoryRuntimeStateRepository(), Hosted()
     messages = InMemoryMessageRepository()
     source = await messages.append_user(PARTITION, "export the ICU occupancy to excel", "source-message-0021")
     service = TaskService(
-        runtime,  # type: ignore[arg-type]
+        runtime,
         messages,
         hosted,  # type: ignore[arg-type]
         query_results=CosmosBlobQueryResultWriter(workspace, blobs),  # type: ignore[arg-type]
@@ -213,11 +183,11 @@ async def test_rows_read_in_chat_reach_the_hosted_agent_as_a_file_it_can_open() 
 
 @pytest.mark.asyncio
 async def test_a_task_with_no_query_reaches_the_agent_exactly_as_it_did_before() -> None:
-    runtime, hosted = Runtime(), Hosted()
+    runtime, hosted = InMemoryRuntimeStateRepository(), Hosted()
     messages = InMemoryMessageRepository()
     source = await messages.append_user(PARTITION, "explain the schema", "source-message-0022")
     service = TaskService(
-        runtime,  # type: ignore[arg-type]
+        runtime,
         messages,
         hosted,  # type: ignore[arg-type]
         query_results=CosmosBlobQueryResultWriter(Workspace(), Blobs()),  # type: ignore[arg-type]

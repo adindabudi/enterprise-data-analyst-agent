@@ -1,0 +1,29 @@
+{
+  "name": "pptxgenjs",
+  "version": "4.0.1-eda.1",
+  "description": "PptxGenJS 4.0.1 distribution without its unused image-size dependency",
+  "license": "MIT",
+  "author": {
+    "name": "Brent Ely",
+    "url": "https://github.com/gitbrent/"
+  },
+  "homepage": "https://gitbrent.github.io/PptxGenJS/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitbrent/PptxGenJS.git"
+  },
+  "exports": {
+    "types": "./types/index.d.ts",
+    "import": "./dist/pptxgen.es.js",
+    "require": "./dist/pptxgen.cjs.js"
+  },
+  "main": "dist/pptxgen.cjs.js",
+  "module": "dist/pptxgen.es.js",
+  "types": "types/index.d.ts",
+  "files": ["dist", "types", "LICENSE", "upstream.json"],
+  "dependencies": {
+    "@types/node": "^22.8.1",
+    "https": "^1.0.0",
+    "jszip": "^3.10.1"
+  }
+}

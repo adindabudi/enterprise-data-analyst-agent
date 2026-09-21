@@ -16,7 +16,8 @@ from eda_api.fabric_ontology import OntologyTarget
 # The source picks its own projection, so the same question came back as 4.7 KB or 21.2 KB across runs.
 # At 8 KB the wide shape lost half its rows and the answer counted 40 of 63.
 MAX_ONTOLOGY_RESULT_CHARS = 24_000
-MAX_ONTOLOGY_SCHEMA_CHARS = 2_000
+# Multi-entity operational sources need their units and grains, not just a compact list of names.
+MAX_ONTOLOGY_SCHEMA_CHARS = 24_000
 MAX_ONTOLOGY_QUERY_CHARS = 10_000
 
 
@@ -279,17 +280,23 @@ def _described_properties(value: object) -> list[str]:
         name = record.get("name")
         if not isinstance(name, str):
             continue
+        value_type = record.get("valueType")
+        typed_name = f"{name}:{value_type}" if isinstance(value_type, str) and value_type else name
         description = _enrichment(record.get("semanticEnrichment")).get("description")
-        described.append(f"{name} ({description})" if isinstance(description, str) and description else name)
+        described.append(
+            f"{typed_name} ({description})" if isinstance(description, str) and description else typed_name
+        )
     return described
 
 
 def _property_names(value: object) -> list[str]:
     names: list[str] = []
     for entry in _object_list(value or []):
-        name = _json_object(entry).get("name")
+        record = _json_object(entry)
+        name = record.get("name")
         if isinstance(name, str):
-            names.append(name)
+            value_type = record.get("valueType")
+            names.append(f"{name}:{value_type}" if isinstance(value_type, str) and value_type else name)
     return names
 
 

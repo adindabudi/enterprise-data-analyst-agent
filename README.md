@@ -10,7 +10,7 @@ It is built on the Microsoft Agent Framework, Azure Container Apps, and storage 
 
 ## Run it locally
 
-Requires Python 3.12, [uv](https://docs.astral.sh/uv/), Node.js 24 with npm 11.6.2 or later (below 12), and Docker Compose.
+Requires Python 3.12, [uv](https://docs.astral.sh/uv/), Node.js 24 with npm 11.6.2 or later (below 12), Docker Compose, and Poppler (`pdftoppm`) for PDF validation tests.
 
 ```sh
 make bootstrap   # install Python and Node dependencies
@@ -20,6 +20,8 @@ make integration # local emulators: Redis and Azurite
 
 Fabric is not required. The core pack runs against synthetic data.
 
+Run `make source-notices` after changing dependencies to regenerate [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This source inventory does not replace release-image SBOM, vulnerability, or secret-scanning gates.
+
 ## Deploy to your own subscription
 
 ### Before you start
@@ -27,6 +29,8 @@ Fabric is not required. The core pack runs against synthetic data.
 You need an Azure subscription, an Entra tenant where you can register an application, and Foundry quota for `gpt-5.6-terra` in your region.
 
 Add to the local toolchain above: Azure CLI 2.80+, azd 1.31.1+, the `azure.ai.agents` azd extension 1.0.0-beta.11+, Docker, `jq`, and the Bicep extension (`az bicep install`). Application images are built remotely in ACR, including from ARM64 hosts.
+
+The image build hooks also require [Syft](https://github.com/anchore/syft) and [Trivy](https://github.com/aquasecurity/trivy) on your PATH for SBOM generation and vulnerability scanning. The full release gate pins Syft to 1.49.0; see the [release checklist](docs/runbooks/release-checklist.md) for the remaining release tools.
 
 Permissions are the step people miss. Read [deployer permissions](docs/operations/deployer-permissions.md) first — it lists each role and why provisioning needs it.
 
@@ -90,6 +94,8 @@ Every pack is fail-closed. Setting a flag makes it `configured`; only its accept
 Fabric also requires two distinct tenants: your product tenant and a separate Fabric tenant. A same-tenant setup can be used to try things out, but it can never reach `ready`.
 
 The Document Pack downloads source-available skills only after you accept their terms explicitly. The Apache-licensed Web Artifact Pack is included in the runtime for validated, self-contained interactive HTML when requested. Export requests produce only the requested file formats; an XLSX export does not add a dashboard.
+
+The sandbox uses Plotly/Kaleido for charts, PyPNG for PNG validation, `pypdf` and Poppler for PDF validation, Pydyf and `pdf-lib` for PDF creation, and PptxGenJS/`pptx2json` for PowerPoint creation and reading. Pillow, Matplotlib, Seaborn, ReportLab, PDFium, and `python-pptx` are not installed. Acquired skill scripts that require those packages must be adapted to these tools before they can pass Document Pack acceptance; enabling the pack alone does not prove compatibility.
 
 The HTML bundler checks the final file in offline Chromium before writing its output. JavaScript startup errors, an empty application root, and non-embedded resource requests fail the build so the agent can repair the source. This initial-render check does not validate every interaction or retroactively change published files.
 

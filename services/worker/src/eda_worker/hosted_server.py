@@ -107,14 +107,18 @@ class HostedAnalysisServices(AnalysisServices):
         return cast(TaskRecord, task)
 
     async def run_analysis(
-        self, task_id: str, pending_command_ids: tuple[str, ...], repair_feedback: str | None = None,
+        self,
+        task_id: str,
+        pending_command_ids: tuple[str, ...],
+        repair_feedback: str | None = None,
     ) -> str:
         runtime = await self._provider.get()
         await runtime.output_planner.ensure(task_id, pending_command_ids=pending_command_ids)
         instruction = RUN_INSTRUCTION
         if repair_feedback is not None:
             instruction += (
-                " The deterministic completion check rejected the previous pass: " + repair_feedback
+                " The deterministic completion check rejected the previous pass: "
+                + repair_feedback
                 + ". Repair only missing or invalid deliverables using existing input and result artifacts. "
                 "Do not drop requirements, repeat completed source queries, or claim that blocked work is complete."
             )
@@ -136,13 +140,12 @@ class HostedAnalysisServices(AnalysisServices):
 
     async def complete(self, task_id: str, text: str) -> str:
         runtime = await self._provider.get()
-        validation = await runtime.activities.validate_outputs(
-            {"taskId": task_id, "requireOutputContract": True}
-        )
+        validation = await runtime.activities.validate_outputs({"taskId": task_id, "requireOutputContract": True})
         if validation.get("outcome") != "passed":
             reason = validation.get("reportRef", "unknown-output-failure")
             if reason.startswith("missing-required-outputs:") or reason in {
-                "no-published-artifacts", "unfinished-plan",
+                "no-published-artifacts",
+                "unfinished-plan",
             }:
                 raise OutputRepairRequired(reason)
             raise AnalysisAgentResponseError(
@@ -219,10 +222,7 @@ def _error_diagnostic(errors: list[Content]) -> str:
         }
     )
     raw_text = " ".join(
-        value
-        for content in errors
-        for value in (content.message, content.error_details)
-        if isinstance(value, str)
+        value for content in errors for value in (content.message, content.error_details) if isinstance(value, str)
     )
     statuses = sorted(set(_HTTP_STATUS.findall(raw_text)))
     exception_types = sorted(set(_EXCEPTION_TYPE.findall(raw_text)))
@@ -244,10 +244,7 @@ def _error_failure_code(errors: list[Content]) -> str:
         }
     )
     raw_text = " ".join(
-        value
-        for content in errors
-        for value in (content.message, content.error_details)
-        if isinstance(value, str)
+        value for content in errors for value in (content.message, content.error_details) if isinstance(value, str)
     )
     statuses = [f"http_{status}" for status in sorted(set(_HTTP_STATUS.findall(raw_text)))]
     exception_types = [_failure_token(name) for name in sorted(set(_EXCEPTION_TYPE.findall(raw_text)))]

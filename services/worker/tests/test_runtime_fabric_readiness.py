@@ -26,9 +26,7 @@ def test_failed_fabric_pack_is_withheld_without_crashing_the_runtime(
 ) -> None:
     caplog.set_level(logging.ERROR)
 
-    readiness = isolate_optional_fabric_failure(
-        FabricReadiness(status=FabricReadinessStatus.FAILED)
-    )
+    readiness = isolate_optional_fabric_failure(FabricReadiness(status=FabricReadinessStatus.FAILED))
 
     assert readiness.status is FabricReadinessStatus.DISABLED
     assert "continuing without Fabric tools" in caplog.text

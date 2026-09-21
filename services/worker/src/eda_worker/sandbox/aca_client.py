@@ -199,7 +199,10 @@ class AcaSandboxClient:
             "parameters": parameters or {},
         }
         await asyncio.to_thread(
-            sandbox.write_file, EXECUTION_CONTEXT, json.dumps(context, sort_keys=True).encode(), create_dirs=True,
+            sandbox.write_file,
+            EXECUTION_CONTEXT,
+            json.dumps(context, sort_keys=True).encode(),
+            create_dirs=True,
         )
         started = time.monotonic()
         result = await asyncio.wait_for(

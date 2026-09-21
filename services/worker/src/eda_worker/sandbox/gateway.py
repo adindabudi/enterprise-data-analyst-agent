@@ -140,7 +140,10 @@ class ArtifactGatewayStore(Protocol):
     async def publish(self, task_id: str, candidate: ArtifactRef, report: ArtifactRef) -> ArtifactRef: ...
 
     async def published_refs(
-        self, task_id: str, *, validation_profile: str | None = None,
+        self,
+        task_id: str,
+        *,
+        validation_profile: str | None = None,
     ) -> tuple[ArtifactRef, ...]: ...
 
 
@@ -270,13 +273,19 @@ class InMemoryArtifactGatewayStore:
         return published
 
     async def published_refs(
-        self, task_id: str, *, validation_profile: str | None = None,
+        self,
+        task_id: str,
+        *,
+        validation_profile: str | None = None,
     ) -> tuple[ArtifactRef, ...]:
         return tuple(
             sorted(
                 (
-                    ref for (owner_task_id, _, _), ref in self._published.items()
-                    if owner_task_id == task_id and ref.kind is not ArtifactKind.INPUT and (
+                    ref
+                    for (owner_task_id, _, _), ref in self._published.items()
+                    if owner_task_id == task_id
+                    and ref.kind is not ArtifactKind.INPUT
+                    and (
                         validation_profile is None
                         or self._stored(task_id, ref).metadata.get("validationProfile") == validation_profile
                     )
@@ -479,7 +488,10 @@ class CosmosBlobArtifactGatewayStore:
         return await self._persist_immutable(task, published_ref, metadata, source_content)
 
     async def published_refs(
-        self, task_id: str, *, validation_profile: str | None = None,
+        self,
+        task_id: str,
+        *,
+        validation_profile: str | None = None,
     ) -> tuple[ArtifactRef, ...]:
         task = await self._resolve_required_task(task_id)
         query = (

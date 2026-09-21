@@ -48,9 +48,7 @@ def test_root_bootstrap_prepares_private_state_then_drops_privileges(
     monkeypatch.setattr(
         entrypoint.os,
         "chown",
-        lambda path, uid, gid, *, follow_symlinks: calls.append(
-            ("chown", Path(path), uid, gid, follow_symlinks)
-        ),
+        lambda path, uid, gid, *, follow_symlinks: calls.append(("chown", Path(path), uid, gid, follow_symlinks)),
     )
     monkeypatch.setattr(entrypoint.os, "setgroups", lambda groups: calls.append(("setgroups", tuple(groups))))
     monkeypatch.setattr(entrypoint.os, "setgid", lambda gid: calls.append(("setgid", gid)))

@@ -310,6 +310,16 @@ def test_write_notice_updates_only_generated_section(tmp_path: Path) -> None:
     assert "beta 2.0.0: Apache-2.0" in text
 
 
+def test_write_notice_deduplicates_identical_components(tmp_path: Path) -> None:
+    module = load_module()
+    notices = tmp_path / "notices.md"
+    record = {"name": "shared-package", "version": "1.0.0", "licenses": ["MIT"]}
+
+    module.write_notice(notices, {"MIT"}, [record, dict(record)])
+
+    assert notices.read_text(encoding="utf-8").count("- shared-package 1.0.0: MIT") == 1
+
+
 def test_main_updates_notices_from_fixture_sboms(tmp_path: Path) -> None:
     module = load_module()
     sbom_dir = tmp_path / "sbom"

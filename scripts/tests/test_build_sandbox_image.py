@@ -13,7 +13,7 @@ def test_disabled_documents_force_empty_terms_build_argument() -> None:
     assert 'documents_enabled="${documents_enabled:-false}"' in script
     assert 'document_terms_accepted=""' in script
     assert (
-        'true)\n        document_terms_accepted='
+        "true)\n        document_terms_accepted="
         '"${EDA_DOCUMENT_TERMS_ACCEPTED:-$(azd_optional_value EDA_DOCUMENT_TERMS_ACCEPTED)}"'
     ) in script
     assert '--build-arg "EDA_DOCUMENT_TERMS_ACCEPTED=${document_terms_accepted}"' in script

@@ -11,8 +11,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from eda_artifacts.documents import generate_pdf
 from openpyxl import Workbook
-from reportlab.pdfgen import canvas
 
 INPUTS = Path("inputs")
 OUTPUTS = Path("outputs")
@@ -25,9 +25,7 @@ document_type = parameters["documentType"]
 
 if document_type == "pdf":
     output = (OUTPUTS / "document.pdf").resolve()
-    pdf = canvas.Canvas(str(output))
-    pdf.drawString(72, 720, "Synthetic benchmark")
-    pdf.save()
+    output.write_bytes(generate_pdf("Synthetic benchmark"))
 elif document_type == "docx":
     output = (OUTPUTS / "document.docx").resolve()
     source = """

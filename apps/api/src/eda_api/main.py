@@ -20,6 +20,7 @@ from eda_api.auth.msal_client import MsalAuthClient
 from eda_api.auth.repository import AuthRepository, CosmosAuthRepository
 from eda_api.auth.routes import router as auth_router
 from eda_api.chat.model import load_interactive_model_config
+from eda_api.chat.provenance import CosmosChatQueryStore
 from eda_api.chat.service import InteractiveChatService, MafInteractiveChatService
 from eda_api.chat.sessions import CosmosInteractiveSessionStore, RedisInteractiveSessionStore
 from eda_api.config import DEFAULT_FRONTEND_DIST, Settings
@@ -412,12 +413,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 fabric_query=fabric_query,
                 graph_query=graph_query,
                 web_search_tool=interactive_web_search_tool,
+                query_store=(
+                    CosmosChatQueryStore(database.get_container_client(config.cosmos_workspace_container))
+                    if database is not None
+                    else None
+                ),
                 session_store=(
                     CosmosInteractiveSessionStore(
                         database.get_container_client(config.cosmos_workspace_container),
                         fallback=(
                             RedisInteractiveSessionStore(redis_client, ttl_seconds=config.redis_stream_ttl_seconds)
-                            if redis_client is not None else None
+                            if redis_client is not None
+                            else None
                         ),
                     )
                     if database is not None

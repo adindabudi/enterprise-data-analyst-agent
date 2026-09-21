@@ -34,7 +34,10 @@ class RuntimeFinalizerRepository(Protocol):
 
 class PublishedArtifactReader(Protocol):
     async def published_refs(
-        self, task_id: str, *, validation_profile: str | None = None,
+        self,
+        task_id: str,
+        *,
+        validation_profile: str | None = None,
     ) -> tuple[ArtifactRef, ...]: ...
 
 
@@ -81,9 +84,12 @@ class CoreTaskFinalizer:
             artifacts = await self._artifacts.published_refs(task_id)
         elif required_profile == "web_artifact_html":
             artifacts = tuple(
-                artifact for artifact in await self._artifacts.published_refs(
-                    task_id, validation_profile="web_artifact_html",
-                ) if artifact.kind is ArtifactKind.HTML
+                artifact
+                for artifact in await self._artifacts.published_refs(
+                    task_id,
+                    validation_profile="web_artifact_html",
+                )
+                if artifact.kind is ArtifactKind.HTML
             )
         else:
             raise ValueError("unsupported required output profile")

@@ -1,21 +1,28 @@
 from __future__ import annotations
 
 import struct
+import zlib
+from collections.abc import Iterable
+from typing import Any, cast
 
+import png
 from defusedxml import ElementTree
-from PIL import Image
 
 
 def validate_png(payload: bytes, *, max_pixels: int = 100_000_000) -> tuple[int, int]:
-    from io import BytesIO
-
-    with Image.open(BytesIO(payload)) as image:
-        image.verify()
-    with Image.open(BytesIO(payload)) as image:
-        width, height = image.size
-    if width * height > max_pixels:
-        raise ValueError("image exceeds pixel limit")
     _validate_png_end(payload)
+    try:
+        reader: Any = png.Reader(bytes=payload)
+        reader.preamble()
+        width, height = int(reader.width), int(reader.height)
+        if width * height > max_pixels:
+            raise ValueError("image exceeds pixel limit")
+        _, _, rows, _ = reader.read()
+        row_count = sum(1 for _ in cast(Iterable[object], rows))
+        if row_count != height:
+            raise ValueError("invalid PNG row count")
+    except (png.Error, zlib.error, struct.error) as error:
+        raise ValueError("invalid PNG pixel data") from error
     return width, height
 
 

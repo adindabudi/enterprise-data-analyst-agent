@@ -72,7 +72,9 @@ class Pipeline:
         )
 
     async def source(self, owner: Principal = OWNER, session_id: str = SESSION_ID):
-        partition = TaskPartition(tenant_id=owner.tenant_id, owner_object_id=owner.owner_object_id, session_id=session_id)
+        partition = TaskPartition(
+            tenant_id=owner.tenant_id, owner_object_id=owner.owner_object_id, session_id=session_id
+        )
         upload = await self.uploads.create_quarantine_upload(owner, session_id, "data.csv", chunks([b"value\n42\n"]))
         message = await self.messages.append_user(partition, "Analyze the attached data", "upload-source-message")
         return partition, message.id, upload.id
@@ -107,7 +109,9 @@ async def test_unclean_inputs_never_reach_task_submission(scan_result: str | Non
     assert pipeline.quarantine.downloads == 0
     assert pipeline.hosted.started == []
     assert pipeline.blobs.items == {}
-    assert await pipeline.runtime.get_owned_task(partition, deterministic_task_id(partition, "blocked-upload-key")) is None
+    assert (
+        await pipeline.runtime.get_owned_task(partition, deterministic_task_id(partition, "blocked-upload-key")) is None
+    )
 
 
 @pytest.mark.parametrize("scope", ["owner", "tenant", "session"])
@@ -135,13 +139,17 @@ async def test_task_retry_reuses_original_inputs_and_does_not_resubmit() -> None
     first = await pipeline.service.start_task(partition, "retry-upload-key", message_id, input_upload_ids=(upload_id,))
     pipeline.quarantine.scan_result = None
 
-    retried = await pipeline.new_service().start_task(partition, "retry-upload-key", message_id, input_upload_ids=(upload_id,))
+    retried = await pipeline.new_service().start_task(
+        partition, "retry-upload-key", message_id, input_upload_ids=(upload_id,)
+    )
 
     assert retried == first
     assert len(pipeline.hosted.started) == 1
 
 
-@pytest.mark.parametrize("error_type", [ServiceRequestError, httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout])
+@pytest.mark.parametrize(
+    "error_type", [ServiceRequestError, httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout]
+)
 @pytest.mark.asyncio
 async def test_known_non_submission_can_retry_without_promoting_inputs_again(error_type: type[Exception]) -> None:
     pipeline = Pipeline()
@@ -186,7 +194,9 @@ async def test_partial_input_promotion_is_retriable_without_duplicate_submission
     with pytest.raises(CosmosHttpResponseError):
         await pipeline.service.start_task(partition, "partial-upload-key", message_id, input_upload_ids=(upload_id,))
     assert pipeline.hosted.started == []
-    task = await pipeline.new_service().start_task(partition, "partial-upload-key", message_id, input_upload_ids=(upload_id,))
+    task = await pipeline.new_service().start_task(
+        partition, "partial-upload-key", message_id, input_upload_ids=(upload_id,)
+    )
 
     assert len(task.input_artifacts) == 1
     assert len(pipeline.hosted.started) == 1
@@ -200,13 +210,17 @@ async def test_concurrent_upload_task_submissions_dispatch_at_most_once() -> Non
 
     results = await asyncio.gather(
         pipeline.service.start_task(partition, "concurrent-upload-key", message_id, input_upload_ids=(upload_id,)),
-        pipeline.new_service().start_task(partition, "concurrent-upload-key", message_id, input_upload_ids=(upload_id,)),
+        pipeline.new_service().start_task(
+            partition, "concurrent-upload-key", message_id, input_upload_ids=(upload_id,)
+        ),
         return_exceptions=True,
     )
 
     assert len(pipeline.hosted.started) == 1
     assert all(isinstance(result, (TaskRecord, RuntimeStateConflict)) for result in results)
-    retried = await pipeline.service.start_task(partition, "concurrent-upload-key", message_id, input_upload_ids=(upload_id,))
+    retried = await pipeline.service.start_task(
+        partition, "concurrent-upload-key", message_id, input_upload_ids=(upload_id,)
+    )
     assert retried.active_attempt_id is not None
     assert len(pipeline.hosted.started) == 1
 
@@ -240,7 +254,9 @@ async def test_ambiguous_dispatch_failure_is_not_blindly_resubmitted(error_type:
     with pytest.raises(error_type):
         await pipeline.service.start_task(partition, "ambiguous-upload-key", message_id, input_upload_ids=(upload_id,))
     with pytest.raises(RuntimeStateConflict):
-        await pipeline.new_service().start_task(partition, "ambiguous-upload-key", message_id, input_upload_ids=(upload_id,))
+        await pipeline.new_service().start_task(
+            partition, "ambiguous-upload-key", message_id, input_upload_ids=(upload_id,)
+        )
 
     assert len(pipeline.hosted.started) == 1
 
@@ -282,9 +298,7 @@ async def test_stale_dispatch_snapshot_cannot_fail_a_newly_attached_attempt() ->
     pipeline = Pipeline()
     partition, message_id, upload_id = await pipeline.source()
     task = await pipeline.service.start_task(partition, "dispatch-race-key", message_id, input_upload_ids=(upload_id,))
-    stale = task.model_copy(
-        update={"active_attempt_id": None, "updated_at": datetime.now(UTC) - timedelta(minutes=11)}
-    )
+    stale = task.model_copy(update={"active_attempt_id": None, "updated_at": datetime.now(UTC) - timedelta(minutes=11)})
 
     result = await pipeline.service.reconcile_abandoned_task(stale)
 
@@ -294,7 +308,9 @@ async def test_stale_dispatch_snapshot_cannot_fail_a_newly_attached_attempt() ->
 
 
 @pytest.mark.asyncio
-async def test_late_dispatch_acknowledgement_is_cancelled_after_canonical_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_late_dispatch_acknowledgement_is_cancelled_after_canonical_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pipeline = Pipeline()
     partition, message_id, upload_id = await pipeline.source()
     original_start = pipeline.hosted.start
@@ -305,7 +321,9 @@ async def test_late_dispatch_acknowledgement_is_cancelled_after_canonical_failur
         return attempt
 
     monkeypatch.setattr(pipeline.hosted, "start", late_start)
-    result = await pipeline.service.start_task(partition, "late-dispatch-key", message_id, input_upload_ids=(upload_id,))
+    result = await pipeline.service.start_task(
+        partition, "late-dispatch-key", message_id, input_upload_ids=(upload_id,)
+    )
 
     assert result.status is TaskStatus.FAILED
     assert result.active_attempt_id is None

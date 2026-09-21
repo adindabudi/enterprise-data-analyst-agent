@@ -60,7 +60,8 @@ class InMemoryWorkspaceRepository:
         prefix = (str(principal.tenant_id), str(principal.owner_object_id))
         return sorted(
             (session for key, session in self._sessions.items() if key[:2] == prefix),
-            key=lambda session: session.last_activity_at, reverse=True,
+            key=lambda session: session.last_activity_at,
+            reverse=True,
         )
 
     async def rename_session(
@@ -130,7 +131,8 @@ class CosmosWorkspaceRepository:
         iterator = self._container.query_items(query=query, parameters=parameters)
         return sorted(
             [WorkspaceSession.model_validate(item) async for item in iterator],
-            key=lambda session: session.last_activity_at, reverse=True,
+            key=lambda session: session.last_activity_at,
+            reverse=True,
         )
 
     async def rename_session(

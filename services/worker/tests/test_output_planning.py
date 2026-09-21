@@ -16,35 +16,63 @@ from eda_runtime_state.tasks import InMemoryRuntimeStateRepository
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("user_request", "kinds"), [
-    ("Ekspor hasil query ke Excel saja, tidak perlu dashboard.", (ArtifactKind.XLSX,)),
-    ("Analisis CSV dan buat workbook Excel.", (ArtifactKind.XLSX,)),
-    ("Buat dashboard HTML.", (ArtifactKind.HTML,)),
-    ("Buat dashboard HTML dan workbook Excel.", (ArtifactKind.HTML, ArtifactKind.XLSX)),
-    ("Jelaskan hasil analisis tanpa file unduhan.", ()),
-])
+@pytest.mark.parametrize(
+    ("user_request", "kinds"),
+    [
+        ("Ekspor hasil query ke Excel saja, tidak perlu dashboard.", (ArtifactKind.XLSX,)),
+        ("Analisis CSV dan buat workbook Excel.", (ArtifactKind.XLSX,)),
+        ("Buat dashboard HTML.", (ArtifactKind.HTML,)),
+        ("Buat dashboard HTML dan workbook Excel.", (ArtifactKind.HTML, ArtifactKind.XLSX)),
+        ("Jelaskan hasil analisis tanpa file unduhan.", ()),
+    ],
+)
 async def test_output_planner_persists_contract_without_tools_and_reuses_it(
-    user_request: str, kinds: tuple[ArtifactKind, ...],
+    user_request: str,
+    kinds: tuple[ArtifactKind, ...],
 ) -> None:
     from eda_worker.output_planning import OutputContractPlanner
 
     now = datetime.now(UTC)
     task = TaskRecord(
-        id="task_12345678", tenant_id=UUID(int=1), owner_object_id=UUID(int=2),
-        session_id="ses_12345678", status=TaskStatus.ANALYZING,
-        checkpoint_sequence=0, command_sequence=0, applied_command_sequence=0,
-        created_at=now, updated_at=now, expires_at=now + timedelta(days=1),
+        id="task_12345678",
+        tenant_id=UUID(int=1),
+        owner_object_id=UUID(int=2),
+        session_id="ses_12345678",
+        status=TaskStatus.ANALYZING,
+        checkpoint_sequence=0,
+        command_sequence=0,
+        applied_command_sequence=0,
+        created_at=now,
+        updated_at=now,
+        expires_at=now + timedelta(days=1),
     )
     repository = InMemoryRuntimeStateRepository()
     await repository.create_task(task, "request-12345678")
-    client = SimpleNamespace(get_response=AsyncMock(return_value=ChatResponse(messages=[
-        Message(role="assistant", contents=[json.dumps({
-            "outputs": [{"kind": kind.value, "minimumCount": 1} for kind in kinds],
-        })]),
-    ])))
-    context = SimpleNamespace(context_snapshot=AsyncMock(return_value=SimpleNamespace(
-        confirmed_requirements=(user_request,),
-    )))
+    client = SimpleNamespace(
+        get_response=AsyncMock(
+            return_value=ChatResponse(
+                messages=[
+                    Message(
+                        role="assistant",
+                        contents=[
+                            json.dumps(
+                                {
+                                    "outputs": [{"kind": kind.value, "minimumCount": 1} for kind in kinds],
+                                }
+                            )
+                        ],
+                    ),
+                ]
+            )
+        )
+    )
+    context = SimpleNamespace(
+        context_snapshot=AsyncMock(
+            return_value=SimpleNamespace(
+                confirmed_requirements=(user_request,),
+            )
+        )
+    )
     planner = OutputContractPlanner(client, repository, context, model_options={"max_tokens": 4096})
 
     first = await planner.ensure(task.id)
@@ -60,11 +88,17 @@ async def test_output_planner_persists_contract_without_tools_and_reuses_it(
     assert "response_format" in options
 
     command = await repository.append_command(
-        task.partition(), task.id, CommandKind.STEER, "Tidak perlu workbook, HTML saja.", "steer-12345678",
+        task.partition(),
+        task.id,
+        CommandKind.STEER,
+        "Tidak perlu workbook, HTML saja.",
+        "steer-12345678",
     )
-    client.get_response.return_value = ChatResponse(messages=[
-        Message(role="assistant", contents=['{"outputs":[{"kind":"html","minimumCount":1}]}']),
-    ])
+    client.get_response.return_value = ChatResponse(
+        messages=[
+            Message(role="assistant", contents=['{"outputs":[{"kind":"html","minimumCount":1}]}']),
+        ]
+    )
     revised = await planner.ensure(task.id, pending_command_ids=(command.id,))
     assert revised.required_outputs is not None
     assert [output.kind for output in revised.required_outputs] == [ArtifactKind.HTML]
@@ -74,12 +108,15 @@ async def test_output_planner_persists_contract_without_tools_and_reuses_it(
     assert client.get_response.await_count == 2
 
 
-@pytest.mark.parametrize("payload", [
-    '{"outputs":[{"kind":"input"}]}',
-    '{"outputs":[{"kind":"xlsx","minimumCount":0}]}',
-    '{"outputs":[{"kind":"xlsx"},{"kind":"xlsx"}]}',
-    'not json',
-])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"outputs":[{"kind":"input"}]}',
+        '{"outputs":[{"kind":"xlsx","minimumCount":0}]}',
+        '{"outputs":[{"kind":"xlsx"},{"kind":"xlsx"}]}',
+        "not json",
+    ],
+)
 def test_output_contract_rejects_invalid_model_results(payload: str) -> None:
     from eda_worker.output_planning import OutputContract
 

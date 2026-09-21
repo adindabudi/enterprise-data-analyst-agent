@@ -28,22 +28,48 @@ def test_session_history_is_restorable_only_by_its_owner(settings: Settings, own
     workspace = InMemoryWorkspaceRepository()
     session = asyncio.run(workspace.create_session(owner, "Room occupancy"))
     auth = InMemoryAuthRepository()
-    login = AuthSessionRecord.create(principal, csrf_token=token_urlsafe(32), ttl_seconds=300, id="auth_history_12345678")
+    login = AuthSessionRecord.create(
+        principal, csrf_token=token_urlsafe(32), ttl_seconds=300, id="auth_history_12345678"
+    )
     asyncio.run(auth.put_session(login))
-    history = SessionHistory(messages=(SessionMessageView(
-        message_id="msg_history_12345678", role="user", text="Export results", created_at=datetime.now(UTC),
-    ),))
+    history = SessionHistory(
+        messages=(
+            SessionMessageView(
+                message_id="msg_history_12345678",
+                role="user",
+                text="Export results",
+                created_at=datetime.now(UTC),
+                steps=[
+                    {
+                        "stepId": "msg_response:attempt:step-1",
+                        "kind": "gql",
+                        "label": "Queried the configured graph",
+                        "state": "completed",
+                        "query": "MATCH (n:Field) RETURN n LIMIT 1",
+                        "querySha256": "a" * 64,
+                        "source": "indonesia-upstream",
+                        "rowCount": "1",
+                    }
+                ],
+            ),
+        )
+    )
     reader = SimpleNamespace(read_history=AsyncMock(return_value=history))
 
     for _ in range(2):
         application = create_app(
-            settings_override=settings, auth_repository_override=auth, workspace_repository_override=workspace,
+            settings_override=settings,
+            auth_repository_override=auth,
+            workspace_repository_override=workspace,
             upload_service_override=UploadService(
-                blob_store=InMemoryBlobStore(), upload_repository=InMemoryUploadRepository(),
+                blob_store=InMemoryBlobStore(),
+                upload_repository=InMemoryUploadRepository(),
                 upload_limit_bytes=settings.upload_limit_bytes,
             ),
-            runtime_repository_override=InMemoryRuntimeStateRepository(), event_store_override=NullTaskEventStore(),
-            message_repository_override=InMemoryMessageRepository(), session_history_reader_override=reader,
+            runtime_repository_override=InMemoryRuntimeStateRepository(),
+            event_store_override=NullTaskEventStore(),
+            message_repository_override=InMemoryMessageRepository(),
+            session_history_reader_override=reader,
         )
         with TestClient(application, base_url="https://analyst.example.test") as client:
             client.cookies.set("eda_session", login.id)
@@ -51,4 +77,5 @@ def test_session_history_is_restorable_only_by_its_owner(settings: Settings, own
         assert response.status_code == (200 if owns_session else 404)
         if owns_session:
             assert response.json() == history.model_dump(mode="json", by_alias=True)
+            assert response.json()["messages"][0]["steps"][0]["rowCount"] == "1"
     assert reader.read_history.await_count == (2 if owns_session else 0)

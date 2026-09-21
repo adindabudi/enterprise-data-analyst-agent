@@ -35,7 +35,8 @@ class ExecuteSandboxOperation(ToolModel):
     input_artifacts: tuple[ArtifactRef, ...] = Field(default=(), max_length=10)
     parameters: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     expected_outputs: tuple[Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,239}$")], ...] = Field(
-        default=(), max_length=10,
+        default=(),
+        max_length=10,
         description="File names this execution must create directly in outputs/. Empty for calculations without files.",
     )
     timeout_seconds: int = Field(default=120, ge=1, le=300)

@@ -10,6 +10,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DesktopWorkspace } from "./DesktopWorkspace";
+import { QueryProvenance } from "./QueryProvenance";
+import { readDataStep } from "../chat/data-step";
 
 afterEach(() => {
   cleanup();
@@ -73,6 +75,127 @@ const firstStep = {
 };
 
 describe("canonical question provenance", () => {
+  it("does not claim an old answer had no queries when records are unavailable", () => {
+    render(
+      <QueryProvenance
+        messages={[
+          {
+            id: "msg_question_12345678",
+            role: "user",
+            text: "A saved question",
+          },
+          {
+            id: "msg_answer_12345678",
+            role: "assistant",
+            text: "A saved answer",
+          },
+        ]}
+        liveSteps={[]}
+        queries={[]}
+        artifacts={[]}
+        taskId={null}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "No query records are available for this saved conversation.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("No queries yet.")).not.toBeInTheDocument();
+  });
+
+  it("restores query provenance for inline answers without a background task", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/?session=ses_provenance_12345678");
+    const energyStep = {
+      ...firstStep,
+      query: "MATCH (w:Well) RETURN count(*) AS wells",
+      source: "indonesia-upstream",
+      executedAt: "2026-09-15T01:00:01Z",
+    };
+    const fallback = withSessionHistory(
+      vi.fn<typeof fetch>((input) =>
+        Promise.reject(new Error(`Unexpected request: ${requestUrl(input)}`)),
+      ),
+    );
+    const fetcher = vi.fn<typeof fetch>((input, options) =>
+      requestUrl(input).endsWith("/history")
+        ? Promise.resolve(
+            jsonResponse({
+              messages: [
+                {
+                  messageId: "msg_question_12345678",
+                  role: "user",
+                  text: "Berapa jumlah sumur?",
+                  createdAt: "2026-09-15T01:00:00Z",
+                  taskId: null,
+                  steps: [energyStep],
+                },
+                {
+                  messageId: "msg_answer_12345678",
+                  role: "assistant",
+                  text: "Ada 12 sumur.",
+                  createdAt: "2026-09-15T01:00:02Z",
+                  taskId: null,
+                },
+              ],
+              tasks: [],
+            }),
+          )
+        : fallback(input, options),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    render(<DesktopWorkspace />);
+    expect(await screen.findByText("Ada 12 sumur.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Provenance" }));
+    const group = await screen.findByRole("group", {
+      name: "Berapa jumlah sumur?",
+    });
+    expect(within(group).getByText(energyStep.query)).toBeVisible();
+    expect(
+      within(group).getByText("Read 1 row from indonesia-upstream"),
+    ).toBeVisible();
+    expect(screen.queryByText("No queries yet.")).not.toBeInTheDocument();
+    expect(
+      fetcher.mock.calls.some(([input]) =>
+        requestUrl(input).endsWith("/provenance"),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not duplicate one query when saved and streamed records overlap", () => {
+    const step = readDataStep(firstStep);
+    if (!step) throw new Error("Test query step is invalid");
+    render(
+      <QueryProvenance
+        messages={[
+          {
+            id: "msg_user_12345678",
+            role: "user",
+            text: "How many rooms?",
+            steps: [step],
+          },
+          {
+            id: "msg_reply_12345678",
+            role: "assistant",
+            text: "A room count.",
+            steps: [step],
+          },
+        ]}
+        liveSteps={[{ ...step, state: "running" }]}
+        queries={[]}
+        artifacts={[]}
+        taskId={null}
+      />,
+    );
+    const group = screen.getByRole("group", { name: "How many rooms?" });
+    expect(within(group).getAllByText(firstQuery.query)).toHaveLength(1);
+    expect(within(group).queryByText("Running query")).not.toBeInTheDocument();
+    expect(
+      within(group).getByText("Read 1 row from lamna-healthcare"),
+    ).toBeVisible();
+  });
+
   it.each(["deep analysis", "interactive handoff"])(
     "groups reads by the original question for %s and clears them on new chat",
     async (mode) => {

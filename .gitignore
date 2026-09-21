@@ -27,6 +27,7 @@ coverage.xml
 htmlcov/
 node_modules/
 dist/
+!services/sandbox/vendor/pptxgenjs/dist/
 *.tsbuildinfo
 playwright-report/
 test-results/

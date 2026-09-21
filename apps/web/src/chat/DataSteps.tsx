@@ -1,45 +1,18 @@
 import { Badge, Button, Spinner, Text } from "@fluentui/react-components";
 import { ChevronDownRegular, ChevronRightRegular } from "@fluentui/react-icons";
 import { useState } from "react";
+import type { DataStep } from "./data-step";
 
-export type DataStep = {
-  stepId: string;
-  kind: "gql" | "ontology_search";
-  label: string;
-  state: "running" | "completed" | "failed";
-  query: string;
-  source: string;
-  rowCount?: number;
-  querySha256: string;
-  resultSha256?: string;
-  detail?: string;
-};
+export {
+  mergeDataSteps,
+  readDataStep,
+  readStoredDataSteps,
+  type DataStep,
+} from "./data-step";
 
 // Fabric writes and runs the ontology query itself, so naming ours would invent provenance.
 const ONTOLOGY_NOTE =
   "Sent as a question. Fabric translates it internally, and the query it runs is not returned to this app.";
-
-const STATES = new Set(["running", "completed", "failed"]);
-
-export function readDataStep(data: Record<string, string>): DataStep | null {
-  const { stepId, kind, label, state, query, source, querySha256 } = data;
-  if (!stepId || !label || !query || !source || !querySha256) return null;
-  if (kind !== "gql" && kind !== "ontology_search") return null;
-  if (!STATES.has(state ?? "")) return null;
-  const rowCount = Number(data.rowCount);
-  return {
-    stepId,
-    kind,
-    label,
-    state: state as DataStep["state"],
-    query,
-    source,
-    querySha256,
-    ...(Number.isInteger(rowCount) && data.rowCount ? { rowCount } : {}),
-    ...(data.resultSha256 ? { resultSha256: data.resultSha256 } : {}),
-    ...(data.detail ? { detail: data.detail } : {}),
-  };
-}
 
 function badgeColor(state: DataStep["state"]) {
   if (state === "failed") return "danger";
@@ -88,8 +61,14 @@ function StepRow({ step }: { step: DataStep }) {
       {expanded && (
         <div className="data-step__detail">
           <pre className="data-step__query">
-            <code>{step.query}</code>
+            <code>{step.query || "(empty query request)"}</code>
           </pre>
+          {step.queryTruncated && (
+            <Text size={100}>
+              Request text is truncated for display; its hash identifies the
+              full submitted request.
+            </Text>
+          )}
           {step.kind === "ontology_search" && (
             <Text size={100}>{ONTOLOGY_NOTE}</Text>
           )}

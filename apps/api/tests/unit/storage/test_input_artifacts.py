@@ -106,7 +106,9 @@ class Workspace:
         except KeyError as error:
             raise CosmosResourceNotFoundError(status_code=404, message="missing") from error
 
-    def query_items(self, *, query: str, parameters: list[dict[str, Any]], partition_key: list[str]) -> AsyncIterator[dict[str, Any]]:
+    def query_items(
+        self, *, query: str, parameters: list[dict[str, Any]], partition_key: list[str]
+    ) -> AsyncIterator[dict[str, Any]]:
         task_id = next(parameter["value"] for parameter in parameters if parameter["name"] == "@taskId")
 
         async def records() -> AsyncIterator[dict[str, Any]]:
@@ -120,7 +122,9 @@ class Workspace:
                 if "c.kind != 'input'" in query and item.get("kind") == "input":
                     continue
                 if "@validationProfile" in query:
-                    profile = next(parameter["value"] for parameter in parameters if parameter["name"] == "@validationProfile")
+                    profile = next(
+                        parameter["value"] for parameter in parameters if parameter["name"] == "@validationProfile"
+                    )
                     if item.get("validationProfile") != profile:
                         continue
                 if query.startswith("SELECT c.artifactId, c.version, c.kind, c.sha256 FROM c "):

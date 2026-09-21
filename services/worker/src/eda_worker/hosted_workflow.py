@@ -68,7 +68,10 @@ class AnalysisServices(Protocol):
     async def checkpoint(self, task_id: str, status: TaskStatus, expected_checkpoint: int) -> TaskRecord: ...
 
     async def run_analysis(
-        self, task_id: str, pending_command_ids: tuple[str, ...], repair_feedback: str | None = None,
+        self,
+        task_id: str,
+        pending_command_ids: tuple[str, ...],
+        repair_feedback: str | None = None,
     ) -> str: ...
 
     async def acknowledge(self, task_id: str, through_sequence: int) -> None: ...
@@ -146,9 +149,13 @@ class AnalyzeExecutor(Executor):
             await ctx.send_message(await _cancel(self._services, task))
             return
         try:
-            text = (await self._services.run_analysis(
-                task.id, controls.pending_command_ids, repair_feedback=command.repair_feedback,
-            )).strip()
+            text = (
+                await self._services.run_analysis(
+                    task.id,
+                    controls.pending_command_ids,
+                    repair_feedback=command.repair_feedback,
+                )
+            ).strip()
             if not text:
                 await ctx.send_message(await _fail(self._services, task, "empty_agent_response"))
                 return
@@ -181,10 +188,14 @@ class AnalyzeExecutor(Executor):
             if command.repair_round >= MAX_OUTPUT_REPAIR_ROUNDS:
                 await ctx.send_message(await _fail(self._services, task, "output_repair_budget_exhausted"))
                 return
-            await ctx.send_message(command.model_copy(update={
-                "repair_round": command.repair_round + 1,
-                "repair_feedback": str(error)[:2000],
-            }))
+            await ctx.send_message(
+                command.model_copy(
+                    update={
+                        "repair_round": command.repair_round + 1,
+                        "repair_feedback": str(error)[:2000],
+                    }
+                )
+            )
         except asyncio.CancelledError:
             latest = await self._services.task(task.id)
             if latest is not None and latest.cancellation_requested:

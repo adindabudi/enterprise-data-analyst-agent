@@ -18,10 +18,10 @@ def test_environment_allowlist_excludes_credentials(monkeypatch) -> None:
     env = execution_environment({"EDA_RANDOM_SEED": "42"})
 
     assert env == {
+        "BROWSER_PATH": "/usr/bin/chromium",
         "HOME": "/workspace/task/home",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
-        "MPLCONFIGDIR": "/workspace/task/.matplotlib",
         "NODE_PATH": "/opt/eda/node_modules",
         "NUMEXPR_NUM_THREADS": "1",
         "OMP_NUM_THREADS": "1",

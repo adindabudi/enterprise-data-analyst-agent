@@ -13,8 +13,8 @@
     "@eda/contracts": "0.1.0",
     "@fluentui/react-components": "9.74.4",
     "@fluentui/react-icons": "2.0.333",
-    "dompurify": "3.4.12",
-    "mermaid": "11.16.0",
+    "dompurify": "3.4.14",
+    "mermaid": "11.17.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -29,6 +29,6 @@
     "@vitejs/plugin-react": "6.0.4",
     "jsdom": "29.1.1",
     "vite": "8.1.5",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }

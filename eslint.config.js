@@ -14,6 +14,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/src/generated/**",
       "apps/api/static/**",
+      "services/sandbox/vendor/**",
     ],
   },
   eslint.configs.recommended,

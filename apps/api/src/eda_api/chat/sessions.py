@@ -48,12 +48,17 @@ class CosmosInteractiveSessionStore:
         stored_state = state if len(serialized.encode("utf-8")) <= MAX_SESSION_STATE_CHARS else None
         if stored_state is None:
             logger.warning("interactive session state exceeds the persistence budget")
-        await self._workspace.upsert_item(body={
-            "id": "interactive-session", "recordType": "interactiveSession",
-            "tenantId": str(partition.tenant_id), "ownerObjectId": str(partition.owner_object_id),
-            "sessionId": partition.session_id, "ttl": 30 * 24 * 60 * 60,
-            "state": stored_state,
-        })
+        await self._workspace.upsert_item(
+            body={
+                "id": "interactive-session",
+                "recordType": "interactiveSession",
+                "tenantId": str(partition.tenant_id),
+                "ownerObjectId": str(partition.owner_object_id),
+                "sessionId": partition.session_id,
+                "ttl": 30 * 24 * 60 * 60,
+                "state": stored_state,
+            }
+        )
         return stored_state
 
 

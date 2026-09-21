@@ -1,9 +1,20 @@
 title = "Enterprise Data Analyst gitleaks policy"
 
-[allowlist]
+[extend]
+useDefault = true
+
+[[allowlists]]
   description = "Exclude only vendored or generated directories. Synthetic secret-shaped test data must be constructed at runtime unless a reviewed fixture path is added here with justification."
   paths = [
     '''^node_modules/''',
     '''^\.venv/''',
     '''^\.artifacts/'''
   ]
+
+[[allowlists]]
+description = "Microsoft's public Azurite development key, only in the emulator test: https://learn.microsoft.com/azure/storage/common/storage-connect-azurite"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)apps/api/tests/integration/test_azurite_uploads\.py$''']
+regexTarget = "secret"
+regexes = ['''^Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==$''']

@@ -18,26 +18,39 @@ from eda_runtime_state.models import TaskPartition
 
 
 def test_oversized_schema_keeps_all_names_without_optional_descriptions() -> None:
-    payload = {"structuredContent": {"values": [
-        {
-            "name": "rooms",
-            "semanticEnrichment": {"description": "x" * MAX_ONTOLOGY_SCHEMA_CHARS, "synonyms": ["wards"]},
-            "properties": [
-                {"name": "RoomId"},
-                {"name": "RoomType", "semanticEnrichment": {"description": "single or shared"}},
-            ],
-            "timeseriesProperties": [{"name": "Occupancy"}],
-        },
-        {"name": "hospitals", "properties": [{"name": "HospitalName"}]},
-    ]}}
+    payload = {
+        "structuredContent": {
+            "values": [
+                {
+                    "name": "rooms",
+                    "semanticEnrichment": {"description": "x" * MAX_ONTOLOGY_SCHEMA_CHARS, "synonyms": ["wards"]},
+                    "properties": [
+                        {"name": "RoomId"},
+                        {"name": "RoomType", "semanticEnrichment": {"description": "single or shared"}},
+                    ],
+                    "timeseriesProperties": [{"name": "Occupancy"}],
+                },
+                {"name": "hospitals", "properties": [{"name": "HospitalName"}]},
+            ]
+        }
+    }
 
     assert ontology_schema(payload) == "rooms: RoomId; RoomType; time series Occupancy | hospitals: HospitalName"
 
 
 def test_schema_still_rejects_names_that_exceed_the_budget() -> None:
-    payload = {"structuredContent": {"values": [
-        {"name": "rooms", "properties": [{"name": "RoomProperty" + str(index)} for index in range(300)]},
-    ]}}
+    payload = {
+        "structuredContent": {
+            "values": [
+                {
+                    "name": "rooms",
+                    "properties": [
+                        {"name": "RoomProperty" + str(index)} for index in range(MAX_ONTOLOGY_SCHEMA_CHARS // 10)
+                    ],
+                },
+            ]
+        }
+    }
 
     with pytest.raises(ValueError, match="description budget"):
         ontology_schema(payload)

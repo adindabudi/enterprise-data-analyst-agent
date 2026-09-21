@@ -3,8 +3,9 @@ from __future__ import annotations
 import io
 import zipfile
 from dataclasses import dataclass
+from typing import Any
 
-from reportlab.pdfgen.canvas import Canvas
+import pydyf
 
 from .office import validate_office
 from .pdf import PageRenderer, validate_pdf
@@ -81,13 +82,34 @@ def generate_xlsx(title: str) -> bytes:
 
 
 def generate_pdf(title: str) -> bytes:
+    document: Any = pydyf.PDF()
+    font: Any = pydyf.Dictionary(
+        {"Type": "/Font", "Subtype": "/Type1", "BaseFont": "/Helvetica", "Encoding": "/WinAnsiEncoding"}
+    )
+    document.add_object(font)
+    text: Any = pydyf.Stream()
+    text.begin_text()
+    text.set_font_size("F1", 12)
+    for content, position in ((title, 720), ("Synthetic maintained document fixture", 690)):
+        text.set_text_matrix(1, 0, 0, 1, 72, position)
+        encoded_content: Any = content.encode("cp1252")
+        text.show_text(pydyf.String(encoded_content))
+    text.end_text()
+    document.add_object(text)
+    document.add_page(
+        pydyf.Dictionary(
+            {
+                "Type": "/Page",
+                "Parent": document.pages.reference,
+                "Contents": text.reference,
+                "MediaBox": pydyf.Array([0, 0, 612, 792]),
+                "Resources": pydyf.Dictionary({"Font": pydyf.Dictionary({"F1": font.reference})}),
+            }
+        )
+    )
+    document.info["Title"] = pydyf.String(title)
     output = io.BytesIO()
-    canvas = Canvas(output, pagesize=(612, 792), invariant=1)
-    canvas.setTitle(title)
-    canvas.drawString(72, 720, title)
-    canvas.drawString(72, 690, "Synthetic maintained document fixture")
-    canvas.showPage()
-    canvas.save()
+    document.write(output, version=b"1.7")
     return output.getvalue()
 
 

@@ -162,7 +162,9 @@ async def test_new_steering_is_applied_by_a_bounded_graph_self_loop() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failures, expected_status, expected_calls", [(1, "completed", 2), (3, "failed", 3)])
 async def test_missing_outputs_use_bounded_repair(
-    failures: int, expected_status: str, expected_calls: int,
+    failures: int,
+    expected_status: str,
+    expected_calls: int,
 ) -> None:
     from eda_worker.hosted_workflow import OutputRepairRequired
 

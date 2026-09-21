@@ -244,6 +244,14 @@ def write_notice(path: Path, licenses: set[str], components: list[dict[str, obje
     existing = path.read_text(encoding="utf-8") if path.exists() else "# Third-Party Notices\n"
     marker = "<!-- GENERATED LICENSE SET START -->"
     end_marker = "<!-- GENERATED LICENSE SET END -->"
+    unique_components = {
+        (
+            str(component.get("name")),
+            str(component.get("version")),
+            tuple(sorted(cast(list[str], component["licenses"]))),
+        ): component
+        for component in components
+    }
     generated = (
         f"{marker}\n\nResolved SPDX license set:\n\n"
         + "\n".join(f"- {license_name}" for license_name in sorted(licenses))
@@ -252,7 +260,7 @@ def write_notice(path: Path, licenses: set[str], components: list[dict[str, obje
             f"- {string_value(component.get('name'), 'notice component name')} "
             f"{string_value(component.get('version'), 'notice component version')}: "
             f"{', '.join(sorted(cast(list[str], component.get('licenses', []))))}"
-            for component in sorted(components, key=lambda item: (str(item.get("name")), str(item.get("version"))))
+            for _, component in sorted(unique_components.items())
         )
         + f"\n\n{end_marker}\n"
     )

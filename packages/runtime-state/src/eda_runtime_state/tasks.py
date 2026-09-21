@@ -59,7 +59,11 @@ class RuntimeStateRepository(Protocol):
     async def set_final_message(self, task_id: str, message_id: str) -> TaskRecord: ...
 
     async def ensure_required_outputs(
-        self, task_id: str, requirements: tuple[RequiredOutput, ...], *, through_sequence: int = 0,
+        self,
+        task_id: str,
+        requirements: tuple[RequiredOutput, ...],
+        *,
+        through_sequence: int = 0,
     ) -> TaskRecord: ...
 
     async def transition_task(self, task_id: str, status: TaskStatus, expected_checkpoint: int) -> TaskRecord: ...
@@ -227,7 +231,11 @@ class InMemoryRuntimeStateRepository:
             return updated
 
     async def ensure_required_outputs(
-        self, task_id: str, requirements: tuple[RequiredOutput, ...], *, through_sequence: int = 0,
+        self,
+        task_id: str,
+        requirements: tuple[RequiredOutput, ...],
+        *,
+        through_sequence: int = 0,
     ) -> TaskRecord:
         async with self._lock:
             task = self._tasks.get(task_id)
@@ -239,10 +247,14 @@ class InMemoryRuntimeStateRepository:
                 raise RuntimeStateConflict("cannot plan a terminal or cancelled task")
             if not 0 <= through_sequence <= task.command_sequence:
                 raise RuntimeStateConflict("output contract command sequence is invalid")
-            updated = TaskRecord.model_validate({
-                **task.model_dump(), "requiredOutputs": requirements, "updatedAt": datetime.now(UTC),
-                "requiredOutputsSequence": through_sequence,
-            })
+            updated = TaskRecord.model_validate(
+                {
+                    **task.model_dump(),
+                    "requiredOutputs": requirements,
+                    "updatedAt": datetime.now(UTC),
+                    "requiredOutputsSequence": through_sequence,
+                }
+            )
             self._tasks[task_id] = updated
             return updated
 
@@ -542,7 +554,11 @@ class CosmosRuntimeStateRepository:
             raise RuntimeStateConflict("active sandbox assignment conflict") from error
 
     async def ensure_required_outputs(
-        self, task_id: str, requirements: tuple[RequiredOutput, ...], *, through_sequence: int = 0,
+        self,
+        task_id: str,
+        requirements: tuple[RequiredOutput, ...],
+        *,
+        through_sequence: int = 0,
     ) -> TaskRecord:
         for attempt in range(3):
             task = await self.resolve_task(task_id)
@@ -554,10 +570,14 @@ class CosmosRuntimeStateRepository:
                 raise RuntimeStateConflict("cannot plan a terminal or cancelled task")
             if not 0 <= through_sequence <= task.command_sequence:
                 raise RuntimeStateConflict("output contract command sequence is invalid")
-            updated = TaskRecord.model_validate({
-                **task.model_dump(), "requiredOutputs": requirements, "updatedAt": datetime.now(UTC),
-                "requiredOutputsSequence": through_sequence,
-            })
+            updated = TaskRecord.model_validate(
+                {
+                    **task.model_dump(),
+                    "requiredOutputs": requirements,
+                    "updatedAt": datetime.now(UTC),
+                    "requiredOutputsSequence": through_sequence,
+                }
+            )
             try:
                 return await self._replace_task(updated, task.etag)
             except RuntimeStateConflict:

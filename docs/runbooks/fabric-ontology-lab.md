@@ -37,6 +37,75 @@ The doctor only reports hashes, counts, and pass/fail status. It validates disti
 
 After doctor succeeds, publish the contract, optionally run the same-tenant smoke, and run the cross-tenant acceptance gate. The smoke cannot promote readiness.
 
+## Separate Indonesian Upstream Demo
+
+The upstream pack is an additive, fictional demonstration, not a replacement for
+the Lamna acceptance fixture or evidence that the optional packs are production-ready.
+It uses public Indonesian geological analogues, not real operator well observations.
+The generator keeps source facts and authored documents separate from evaluation
+answer keys. Do not upload the `evaluation` directory to a Lakehouse source or
+document knowledge base.
+
+Generate and inspect the local artifacts from the repository root:
+
+```sh
+.venv/bin/python scripts/energy_demo_data.py --output .artifacts/energy-demo
+.venv/bin/python scripts/energy_demo_fabric.py --pack .artifacts/energy-demo
+.venv/bin/python scripts/energy_demo_documents.py --pack .artifacts/energy-demo
+.venv/bin/python scripts/energy_demo_gql.py --pack .artifacts/energy-demo
+```
+
+These commands do not call Azure. The initial ontology blueprint is **unbound**.
+After approval, create a dedicated, schema-enabled `IndonesiaEnergyDemoLH`, upload
+only the source tables plus their schema/manifest, attach the generated notebook
+to that Lakehouse, and run its preview. Its write mode is create-only and requires
+`APPLY=True`. Never attach it to a Lamna or Centoso Lakehouse.
+
+Compile the actual bindings only after the new Lakehouse UUID is known:
+
+Spark can normalize managed table names to lowercase. Discover their actual names
+under `Tables/dbo` in OneLake and provide an explicit contract-to-physical-name
+JSON map (for example, `"Well": "well"`). Entity labels remain unchanged. The
+Lakehouse List Tables REST endpoint currently rejects schema-enabled Lakehouses;
+use OneLake directory listing or the Spark catalog rather than guessing paths.
+
+```sh
+.venv/bin/python scripts/energy_demo_fabric.py --pack .artifacts/energy-demo \
+  --workspace "$FABRIC_WORKSPACE_ID" --lakehouse "$ENERGY_LAKEHOUSE_ID" \
+  --table-names "$ENERGY_TABLE_NAME_MAP" --overwrite
+```
+
+The compiler includes stable entity/property IDs, directed contextualizations and
+semantic enrichment. The current [REST definition article](https://learn.microsoft.com/rest/api/fabric/articles/item-management/definitions/ontology-definition)
+documents enrichment, although its older machine-readable schemas do not fully
+validate that metadata. Synonyms belong only on entities. Critical grain, units and
+temporal rules also belong in agent instructions; relationship metadata is not
+currently used by the public Data Agent experience.
+
+Creation, first opening of the generated Graph in Fabric, ingestion/refresh,
+permission checks and application catalog switching remain separate operations.
+Do not select the new source before its row counts and directed edges match the
+pack and its GQL regression cases pass. `energy_demo_live.py` records graph-level
+results; it does not prove natural-language or document-retrieval accuracy.
+Keep the old catalog for rollback and start a fresh chat after a source switch.
+
+`config/energy-agent-instructions.txt` is an undeployed candidate policy, not a
+precomputed answer prompt. `config/energy-research-evidence.json` records public
+sources and their limits. The app's ontology schema budget accommodates richer
+multi-entity sources and retains numeric/timestamp types. This source change still
+requires a reviewed application deployment.
+
+After `energy_demo_live.py` records a complete successful run, render the operator
+guide with `--live-gql-report evaluation/<report-name>.json --overwrite`. This
+replaces the offline source status with the report's observed GQL outcome, without
+changing source PDF content or claiming natural-language agent accuracy. Keep the
+report and guide in `evaluation`, never in a retrieval source.
+
+The existing ontology MCP and direct GQL integration is **not** automatically a
+Fabric Data Agent or Foundry IQ deployment. PDFs and schematics are prepared
+evidence, not proof that document retrieval, image interpretation, ADME ingestion
+or a 3D viewer has been configured.
+
 ## Cleanup
 
 Perform workspace cleanup before capacity cleanup. The cleanup command defaults to dry run:

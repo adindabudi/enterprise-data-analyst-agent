@@ -194,7 +194,9 @@ async def test_runner_authorizes_only_its_trusted_bundle_for_one_invocation(
     client = FakeClient()
     gateway = DynamicSessionCapabilityGateway(client, runtime, store)
     bundle = await store.persist_bytes(runtime.task.id, ArtifactKind.INPUT, "document-skill-pdf.zip", b"trusted-bundle")
-    lookalike = await store.persist_bytes(runtime.task.id, ArtifactKind.INPUT, "document-skill-pdf.zip", b"untrusted-data")
+    lookalike = await store.persist_bytes(
+        runtime.task.id, ArtifactKind.INPUT, "document-skill-pdf.zip", b"untrusted-data"
+    )
     operation = ExecuteSandboxOperation(runtime=SandboxRuntime.PYTHON, source="print(1)", input_artifacts=(bundle,))
     assert (await gateway.execute(runtime.task.id, operation)).status is CapabilityStatus.BLOCKED
 
@@ -202,7 +204,9 @@ async def test_runner_authorizes_only_its_trusted_bundle_for_one_invocation(
         assert task_id == runtime.task.id and skill_name == "pdf"
         return bundle
 
-    runner = DocumentSkillScriptRunner(gateway=gateway, task_id=runtime.task.id, bundle_root=bundle_root, bundle_loader=load_bundle)
+    runner = DocumentSkillScriptRunner(
+        gateway=gateway, task_id=runtime.task.id, bundle_root=bundle_root, bundle_loader=load_bundle
+    )
     args = {"document": lookalike.model_dump(mode="json", by_alias=True)} if unbound_document else None
     result = await runner(Skill(path=str(bundle_root / "pdf")), Script(full_path=str(script_path)), args)
 

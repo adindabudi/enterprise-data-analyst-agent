@@ -451,7 +451,8 @@ async def test_silent_retries_one_etag_conflict() -> None:
 @pytest.mark.parametrize("grant_change", ["metadata", "reauth", "deleted", "expired", "scope", "cache"])
 @pytest.mark.parametrize("mutate_cache", [False, True])
 async def test_metadata_contention_does_not_invalidate_an_unchanged_token(
-    grant_change: str, mutate_cache: bool,
+    grant_change: str,
+    mutate_cache: bool,
 ) -> None:
     class ContendedRepository(InMemoryFabricGrantRepository):
         async def replace_grant(self, grant: FabricGrantRecord, *, etag: str) -> FabricGrantRecord:
@@ -468,9 +469,11 @@ async def test_metadata_contention_does_not_invalidate_an_unchanged_token(
             elif grant_change == "scope":
                 changes["scope_hash"] = "a" * 64
             elif grant_change == "cache":
-                changes["cache"] = current.cache.model_copy(update={
-                    "ciphertext": _encode(f"cache-{current.etag}".encode()),
-                })
+                changes["cache"] = current.cache.model_copy(
+                    update={
+                        "ciphertext": _encode(f"cache-{current.etag}".encode()),
+                    }
+                )
             await super().replace_grant(
                 current.model_copy(update=changes),
                 etag=current.etag,
@@ -488,23 +491,26 @@ async def test_metadata_contention_does_not_invalidate_an_unchanged_token(
         offload=_direct_offload,
         token_cache_factory=_FakeCache,
         application_factory=lambda **kwargs: _FakeMsalApp(
-            cache=kwargs["token_cache"], mutate_cache=mutate_cache,
+            cache=kwargs["token_cache"],
+            mutate_cache=mutate_cache,
             result={"access_token": _access_token(), "expires_in": 1200},
             accounts=[{"home_account_id": "home-account-id"}],
         ),
     )
 
     if grant_change != "metadata" or mutate_cache:
-        expected_error = (
-            FabricGrantConflict if grant_change in {"cache", "metadata"} else FabricAuthorizationRequired
-        )
+        expected_error = FabricGrantConflict if grant_change in {"cache", "metadata"} else FabricAuthorizationRequired
         with pytest.raises(expected_error):
             await service.acquire_access_token(
-                tenant_id=grant.tenant_id, owner_object_id=grant.owner_object_id, provider=grant.provider,
+                tenant_id=grant.tenant_id,
+                owner_object_id=grant.owner_object_id,
+                provider=grant.provider,
             )
     else:
         token = await service.acquire_access_token(
-            tenant_id=grant.tenant_id, owner_object_id=grant.owner_object_id, provider=grant.provider,
+            tenant_id=grant.tenant_id,
+            owner_object_id=grant.owner_object_id,
+            provider=grant.provider,
         )
         assert token.token == _access_token()
 

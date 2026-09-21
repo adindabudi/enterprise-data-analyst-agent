@@ -406,3 +406,4 @@ output AZURE_CONTAINER_REGISTRY_RESOURCE_ID string = containerRegistry.outputs.r
 output AZURE_OPENAI_ENDPOINT string = foundry.outputs.resourceEndpoint
 output FOUNDRY_PROJECT_ENDPOINT string = foundry.outputs.projectEndpoint
 output FABRIC_KEY_VAULT_URL string = fabricEnabled ? fabricAuth!.outputs.vaultUri : ''
+output AZURE_RESOURCE_GROUP string = resourceGroup.name

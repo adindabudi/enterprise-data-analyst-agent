@@ -88,7 +88,12 @@ def submit(env: HttpPipeline, message_id: str, upload_ids: list[str]):
 
 @pytest.mark.parametrize(
     ("scan_result", "expected_status", "code"),
-    [(None, 409, "upload_scanning"), ("Malicious", 422, "upload_rejected"), ("Error", 422, "upload_scan_failed"), ("Not scanned", 422, "upload_scan_failed")],
+    [
+        (None, 409, "upload_scanning"),
+        ("Malicious", 422, "upload_rejected"),
+        ("Error", 422, "upload_scan_failed"),
+        ("Not scanned", 422, "upload_scan_failed"),
+    ],
 )
 def test_task_submission_maps_authoritative_scan_states(
     http_pipeline: HttpPipeline, scan_result: str | None, expected_status: int, code: str
@@ -135,7 +140,9 @@ def test_task_submission_hides_foreign_session_uploads(http_pipeline: HttpPipeli
     env = http_pipeline
     _, message_id = prepare(env)
     foreign = asyncio.run(
-        env.pipeline.uploads.create_quarantine_upload(OWNER, "ses_foreign_session01", "data.csv", chunks([b"value\n42\n"]))
+        env.pipeline.uploads.create_quarantine_upload(
+            OWNER, "ses_foreign_session01", "data.csv", chunks([b"value\n42\n"])
+        )
     )
 
     response = submit(env, message_id, [foreign.id])
@@ -145,7 +152,9 @@ def test_task_submission_hides_foreign_session_uploads(http_pipeline: HttpPipeli
     assert env.pipeline.quarantine.downloads == 0
 
 
-@pytest.mark.parametrize("upload_ids", [["upl_12345678"] * 2, [f"upl_{index:08d}" for index in range(11)], ["../blob"], None])
+@pytest.mark.parametrize(
+    "upload_ids", [["upl_12345678"] * 2, [f"upl_{index:08d}" for index in range(11)], ["../blob"], None]
+)
 def test_task_input_id_contract_is_bounded_and_strict(http_pipeline: HttpPipeline, upload_ids: object) -> None:
     env = http_pipeline
     _, message_id = prepare(env)

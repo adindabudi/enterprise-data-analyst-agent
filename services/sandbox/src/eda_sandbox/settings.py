@@ -19,10 +19,10 @@ MAX_OPEN_FILES = 1024
 
 def execution_environment(extra: dict[str, str] | None = None) -> dict[str, str]:
     environment = {
+        "BROWSER_PATH": "/usr/bin/chromium",
         "HOME": "/workspace/task/home",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
-        "MPLCONFIGDIR": "/workspace/task/.matplotlib",
         "NODE_PATH": "/opt/eda/node_modules",
         "NUMEXPR_NUM_THREADS": "1",
         "OMP_NUM_THREADS": "1",

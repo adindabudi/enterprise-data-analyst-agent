@@ -32,9 +32,7 @@ def test_hosted_redis_assignment_name_is_bound_to_the_current_principal() -> Non
 
     expected = module.load_expected_assignments(EXPECTED, outputs)
     hosted = next(
-        policy
-        for policy in expected.redis_access_policies
-        if policy.principal_id == outputs["hostedAgentPrincipalId"]
+        policy for policy in expected.redis_access_policies if policy.principal_id == outputs["hostedAgentPrincipalId"]
     )
 
     assert hosted.assignment_name == "hostedAgent-333333333333"

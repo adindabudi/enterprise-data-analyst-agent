@@ -57,6 +57,7 @@ def test_azure_yaml_orchestrates_api_and_hosted_agent_in_safe_hook_order() -> No
         "&& ./scripts/configure-fabric-entra.sh bootstrap && ./scripts/run-fabric-provider-hook.sh preprovision"
     )
     assert hooks["postprovision"]["run"] == (
+        "uv run python scripts/sync-bicep-outputs.py && "
         "./scripts/configure-fabric-entra.sh finalize && ./scripts/run-fabric-provider-hook.sh postprovision "
         "&& ./scripts/build-worker-image.sh && ./scripts/build-sandbox-image.sh && ./scripts/deploy-sandbox-group.sh "
         "&& ./scripts/configure-entra-federation.sh"

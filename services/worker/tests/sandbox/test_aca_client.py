@@ -192,11 +192,13 @@ async def test_execution_writes_context_with_real_imported_paths() -> None:
     context = json.loads(group.sandboxes[sandbox_id].files["/workspace/task/execution-context.json"])
     assert context["output_directory"] == "/workspace/task/outputs"
     assert context["parameters"] == {"currency": "IDR"}
-    assert context["inputs"] == [{
-        "display_name": "revenue.csv",
-        "path": f"/workspace/task/inputs/{imported.file_id}",
-        "sha256": imported.sha256,
-    }]
+    assert context["inputs"] == [
+        {
+            "display_name": "revenue.csv",
+            "path": f"/workspace/task/inputs/{imported.file_id}",
+            "sha256": imported.sha256,
+        }
+    ]
 
 
 @pytest.mark.asyncio

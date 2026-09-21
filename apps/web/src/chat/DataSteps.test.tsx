@@ -58,6 +58,18 @@ const searchStep: DataStep = {
 };
 
 describe("DataStepsBlock", () => {
+  it("labels truncated failed requests without pretending the displayed text is complete", () => {
+    render(
+      <DataStepsBlock
+        steps={[{ ...gqlStep, state: "failed", queryTruncated: true }]}
+        running={false}
+      />,
+    );
+    expect(
+      screen.getByText(/Request text is truncated for display/),
+    ).toBeVisible();
+  });
+
   it("summarises a finished turn instead of listing every step at once", () => {
     render(<DataStepsBlock steps={[gqlStep, searchStep]} running={false} />);
 

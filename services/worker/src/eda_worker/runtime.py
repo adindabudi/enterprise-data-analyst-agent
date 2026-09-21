@@ -426,7 +426,9 @@ async def build_analysis_runtime(settings: WorkerSettings) -> AnalysisRuntime:
             activities=activities,
             resources=resources.pop_all(),
             output_planner=OutputContractPlanner(
-                cast(OutputPlanningClient, foundry_client), runtime_repository, task_state,
+                cast(OutputPlanningClient, foundry_client),
+                runtime_repository,
+                task_state,
                 model_options=startup.contract.options_for(WorkClass.CLARIFICATION),
             ),
         )

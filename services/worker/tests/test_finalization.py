@@ -141,7 +141,10 @@ async def test_failure_releases_the_task_scoped_sandbox() -> None:
     ],
 )
 async def test_dashboard_completion_requires_published_web_validation(
-    kind: ArtifactKind, profile: ValidationProfile, status: str, expected: str,
+    kind: ArtifactKind,
+    profile: ValidationProfile,
+    status: str,
+    expected: str,
 ) -> None:
     runtime = InMemoryRuntimeStateRepository()
     value = task()
@@ -149,15 +152,22 @@ async def test_dashboard_completion_requires_published_web_validation(
     artifacts = InMemoryArtifactGatewayStore()
     candidate = await artifacts.persist_bytes(value.id, kind, "result.html", b"result")
     report = await artifacts.persist_validation(
-        value.id, candidate, profile=profile, report=b"validation", status=status,
+        value.id,
+        candidate,
+        profile=profile,
+        report=b"validation",
+        status=status,
     )
     if status == "passed":
         await artifacts.publish(value.id, candidate, report)
     finalizer = CoreTaskFinalizer(runtime, artifacts, InMemoryProjectionRepository(), Sandbox())
 
-    result = await finalizer.validate_outputs({
-        "taskId": value.id, "requiredProfile": "web_artifact_html",
-    })
+    result = await finalizer.validate_outputs(
+        {
+            "taskId": value.id,
+            "requiredProfile": "web_artifact_html",
+        }
+    )
 
     assert result["outcome"] == expected
 
@@ -170,15 +180,26 @@ async def test_dashboard_completion_refuses_unfinished_plan() -> None:
     artifacts = InMemoryArtifactGatewayStore()
     candidate = await artifacts.persist_bytes(value.id, ArtifactKind.HTML, "dashboard.html", b"html")
     report = await artifacts.persist_validation(
-        value.id, candidate, ValidationProfile.WEB_ARTIFACT_HTML, b"passed", "passed",
+        value.id,
+        candidate,
+        ValidationProfile.WEB_ARTIFACT_HTML,
+        b"passed",
+        "passed",
     )
     await artifacts.publish(value.id, candidate, report)
     finalizer = CoreTaskFinalizer(
-        runtime, artifacts, InMemoryProjectionRepository(), Sandbox(), OpenTodos("Reconcile totals"),
+        runtime,
+        artifacts,
+        InMemoryProjectionRepository(),
+        Sandbox(),
+        OpenTodos("Reconcile totals"),
     )
-    assert await finalizer.validate_outputs({
-        "taskId": value.id, "requiredProfile": "web_artifact_html",
-    }) == {"outcome": "failed", "reportRef": "unfinished-plan"}
+    assert await finalizer.validate_outputs(
+        {
+            "taskId": value.id,
+            "requiredProfile": "web_artifact_html",
+        }
+    ) == {"outcome": "failed", "reportRef": "unfinished-plan"}
 
 
 class OpenTodos:
@@ -191,23 +212,56 @@ class OpenTodos:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("requirements", "published_kind", "profile", "open_todos", "report_ref"), [
-    (None, ArtifactKind.XLSX, ValidationProfile.CORE_XLSX, (), "missing-output-contract"),
-    ((RequiredOutput(kind=ArtifactKind.XLSX),), None, ValidationProfile.CORE_XLSX, (),
-     "missing-required-outputs:xlsx(0/1)"),
-    ((RequiredOutput(kind=ArtifactKind.XLSX),), ArtifactKind.XLSX, ValidationProfile.CORE_HTML, (),
-     "missing-required-outputs:xlsx(0/1)"),
-    ((RequiredOutput(kind=ArtifactKind.XLSX, minimum_count=2),), ArtifactKind.XLSX,
-     ValidationProfile.CORE_XLSX, (), "missing-required-outputs:xlsx(1/2)"),
-    ((RequiredOutput(kind=ArtifactKind.HTML), RequiredOutput(kind=ArtifactKind.XLSX)), ArtifactKind.XLSX,
-     ValidationProfile.CORE_XLSX, (), "missing-required-outputs:html(0/1)"),
-    ((RequiredOutput(kind=ArtifactKind.HTML),), ArtifactKind.HTML, ValidationProfile.CORE_HTML, (),
-     "missing-required-outputs:html(0/1)"),
-    ((RequiredOutput(kind=ArtifactKind.XLSX),), ArtifactKind.XLSX, ValidationProfile.CORE_XLSX,
-     ("Reconcile totals",), "unfinished-plan"),
-    ((RequiredOutput(kind=ArtifactKind.XLSX),), ArtifactKind.XLSX, ValidationProfile.CORE_XLSX, (), None),
-    ((), None, ValidationProfile.CORE_XLSX, (), None),
-])
+@pytest.mark.parametrize(
+    ("requirements", "published_kind", "profile", "open_todos", "report_ref"),
+    [
+        (None, ArtifactKind.XLSX, ValidationProfile.CORE_XLSX, (), "missing-output-contract"),
+        (
+            (RequiredOutput(kind=ArtifactKind.XLSX),),
+            None,
+            ValidationProfile.CORE_XLSX,
+            (),
+            "missing-required-outputs:xlsx(0/1)",
+        ),
+        (
+            (RequiredOutput(kind=ArtifactKind.XLSX),),
+            ArtifactKind.XLSX,
+            ValidationProfile.CORE_HTML,
+            (),
+            "missing-required-outputs:xlsx(0/1)",
+        ),
+        (
+            (RequiredOutput(kind=ArtifactKind.XLSX, minimum_count=2),),
+            ArtifactKind.XLSX,
+            ValidationProfile.CORE_XLSX,
+            (),
+            "missing-required-outputs:xlsx(1/2)",
+        ),
+        (
+            (RequiredOutput(kind=ArtifactKind.HTML), RequiredOutput(kind=ArtifactKind.XLSX)),
+            ArtifactKind.XLSX,
+            ValidationProfile.CORE_XLSX,
+            (),
+            "missing-required-outputs:html(0/1)",
+        ),
+        (
+            (RequiredOutput(kind=ArtifactKind.HTML),),
+            ArtifactKind.HTML,
+            ValidationProfile.CORE_HTML,
+            (),
+            "missing-required-outputs:html(0/1)",
+        ),
+        (
+            (RequiredOutput(kind=ArtifactKind.XLSX),),
+            ArtifactKind.XLSX,
+            ValidationProfile.CORE_XLSX,
+            ("Reconcile totals",),
+            "unfinished-plan",
+        ),
+        ((RequiredOutput(kind=ArtifactKind.XLSX),), ArtifactKind.XLSX, ValidationProfile.CORE_XLSX, (), None),
+        ((), None, ValidationProfile.CORE_XLSX, (), None),
+    ],
+)
 async def test_completion_validates_requested_outputs_without_a_default_html_profile(
     requirements: tuple[RequiredOutput, ...] | None,
     published_kind: ArtifactKind | None,
@@ -221,12 +275,19 @@ async def test_completion_validates_requested_outputs_without_a_default_html_pro
     artifacts = InMemoryArtifactGatewayStore()
     if published_kind is not None:
         candidate = await artifacts.persist_bytes(
-            value.id, published_kind, f"result.{published_kind.value}", b"result",
+            value.id,
+            published_kind,
+            f"result.{published_kind.value}",
+            b"result",
         )
         report = await artifacts.persist_validation(value.id, candidate, profile, b"passed", "passed")
         await artifacts.publish(value.id, candidate, report)
     finalizer = CoreTaskFinalizer(
-        runtime, artifacts, InMemoryProjectionRepository(), Sandbox(), OpenTodos(*open_todos),
+        runtime,
+        artifacts,
+        InMemoryProjectionRepository(),
+        Sandbox(),
+        OpenTodos(*open_todos),
     )
 
     result = await finalizer.validate_outputs({"taskId": value.id, "requireOutputContract": True})
@@ -240,15 +301,21 @@ async def test_completion_validates_requested_outputs_without_a_default_html_pro
 @pytest.mark.asyncio
 async def test_completion_requires_every_declared_deliverable() -> None:
     runtime = InMemoryRuntimeStateRepository()
-    value = TaskRecord.model_validate({
-        **task().model_dump(),
-        "requiredOutputs": [{"kind": "html", "minimumCount": 1}, {"kind": "xlsx", "minimumCount": 1}],
-    })
+    value = TaskRecord.model_validate(
+        {
+            **task().model_dump(),
+            "requiredOutputs": [{"kind": "html", "minimumCount": 1}, {"kind": "xlsx", "minimumCount": 1}],
+        }
+    )
     await runtime.create_task(value, "request-output-contract-12345678")
     artifacts = InMemoryArtifactGatewayStore()
     dashboard = await artifacts.persist_bytes(value.id, ArtifactKind.HTML, "dashboard.html", b"html")
     report = await artifacts.persist_validation(
-        value.id, dashboard, ValidationProfile.WEB_ARTIFACT_HTML, b"passed", "passed",
+        value.id,
+        dashboard,
+        ValidationProfile.WEB_ARTIFACT_HTML,
+        b"passed",
+        "passed",
     )
     await artifacts.publish(value.id, dashboard, report)
     finalizer = CoreTaskFinalizer(runtime, artifacts, InMemoryProjectionRepository(), Sandbox())
@@ -261,7 +328,9 @@ async def test_completion_requires_every_declared_deliverable() -> None:
     workbook = await artifacts.persist_bytes(value.id, ArtifactKind.XLSX, "analysis.xlsx", b"xlsx")
     report = await artifacts.persist_validation(value.id, workbook, ValidationProfile.CORE_XLSX, b"passed", "passed")
     await artifacts.publish(value.id, workbook, report)
-    assert (await finalizer.validate_outputs({"taskId": value.id, "requiredProfile": "web_artifact_html"}))["outcome"] == "passed"
+    assert (await finalizer.validate_outputs({"taskId": value.id, "requiredProfile": "web_artifact_html"}))[
+        "outcome"
+    ] == "passed"
 
 
 @pytest.mark.asyncio
