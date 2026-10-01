@@ -111,10 +111,16 @@ case "$image" in
 esac
 
 az acr login --name "$registry_name" --only-show-errors || fail "unable to authenticate image scanners to ACR"
+# The only accepted findings are unexpired entries in the waiver register the release gate also reads.
+waiver_register="$project_root/docs/security/vulnerability-waivers.json"
+ignore_file="$(mktemp)" || fail "unable to create the scan waiver list"
+jq -r --arg today "$(date -u +%F)" '.waivers[] | select(.expires >= $today) | .id' "$waiver_register" > "$ignore_file" \
+    || { rm -f "$ignore_file"; fail "unable to read the vulnerability waiver register"; }
 # Reading through the local daemon fails on hosts whose architecture differs from the image.
 trivy image --image-src remote --platform linux/amd64 --timeout 60m \
-    --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$image" >/dev/null \
-    || fail "sandbox image vulnerability scan failed"
+    --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --ignorefile "$ignore_file" "$image" >/dev/null \
+    || { rm -f "$ignore_file"; fail "sandbox image vulnerability scan failed"; }
+rm -f "$ignore_file"
 
 artifact_directory="$project_root/.azure/$environment_name"
 mkdir -p "$artifact_directory"

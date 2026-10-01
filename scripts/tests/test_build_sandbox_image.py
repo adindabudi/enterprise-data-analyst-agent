@@ -30,3 +30,11 @@ def test_vulnerability_scan_has_explicit_bounded_timeout() -> None:
     assert "AbacRepositoryPermissions" in script
     assert "LegacyRegistryPermissions" in script
     assert "roleAssignmentMode" in script
+
+
+def test_vulnerability_scan_accepts_only_unexpired_registered_waivers() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    assert 'waiver_register="$project_root/docs/security/vulnerability-waivers.json"' in script
+    assert "select(.expires >= $today) | .id" in script
+    assert '--ignore-unfixed --ignorefile "$ignore_file" "$image"' in script
