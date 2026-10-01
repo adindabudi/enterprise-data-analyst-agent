@@ -558,7 +558,7 @@ Resolved components:
 - pydantic-core 2.46.4: MIT
 - pydantic-settings 2.14.2: MIT
 - pydyf 0.12.1: BSD-3-Clause
-- pyjwt 2.13.0: MIT
+- pyjwt 2.14.0: MIT
 - pypdf 6.14.2: BSD-3-Clause
 - pypng 0.20220715.0: MIT
 - python-dateutil 2.9.0.post0: Apache-2.0, BSD-3-Clause
@@ -643,7 +643,7 @@ Resolved components:
 - typing-inspection 0.4.2: MIT
 - undici-types 6.21.0: MIT
 - undici-types 7.24.6: MIT
-- urllib3 2.7.0: MIT
+- urllib3 2.8.0: MIT
 - use-callback-ref 1.3.3: MIT
 - use-sidecar 1.1.3: MIT
 - use-sync-external-store 1.6.0: MIT

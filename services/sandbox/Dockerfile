@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.8
-FROM python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2 AS document-skills
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS document-skills
 ARG EDA_DOCUMENT_TERMS_ACCEPTED=""
 ENV EDA_DOCUMENT_TERMS_ACCEPTED=$EDA_DOCUMENT_TERMS_ACCEPTED
 WORKDIR /src
@@ -28,7 +28,7 @@ COPY services/sandbox/vendor/pptxgenjs ./vendor/pptxgenjs
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm ci --omit=dev --ignore-scripts=false
 
-FROM python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2 AS wheel-builder
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS wheel-builder
 WORKDIR /build
 COPY services/sandbox/requirements.lock ./
 RUN python -m pip wheel --require-hashes --wheel-dir /wheels -r requirements.lock
@@ -38,7 +38,7 @@ COPY services/sandbox /src/services/sandbox
 COPY --from=document-skills /opt/document-skills /opt/document-skills
 RUN python -m pip wheel --no-deps --wheel-dir /wheels /src/packages/contracts/python /src/packages/artifacts /src/services/sandbox
 
-FROM python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
 ARG SOURCE_REVISION=unknown
 LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 ARG DEBIAN_SNAPSHOT=20260726T000000Z

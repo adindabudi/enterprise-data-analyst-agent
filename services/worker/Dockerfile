@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.8
-FROM python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2 AS document-skills
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS document-skills
 ARG EDA_DOCUMENT_TERMS_ACCEPTED=""
 ENV EDA_DOCUMENT_TERMS_ACCEPTED=$EDA_DOCUMENT_TERMS_ACCEPTED
 WORKDIR /src
@@ -20,7 +20,7 @@ RUN python -m pip install --no-cache-dir --require-hashes -r scripts/document-sk
          && python /build-bundles.py --source /opt/document-skills --output /opt/document-skills; \
        fi
 
-FROM python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2 AS wheel-builder
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS wheel-builder
 WORKDIR /src
 COPY --from=ghcr.io/astral-sh/uv:0.9.16 /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
@@ -30,21 +30,23 @@ COPY packages/provenance packages/provenance
 COPY packages/runtime-state packages/runtime-state
 COPY services/worker services/worker
 RUN uv export --frozen --package eda-worker --no-dev --no-emit-workspace --format requirements-txt --output-file requirements.txt \
-    && python -m pip wheel --require-hashes --wheel-dir /wheels -r requirements.txt \
+    && python -m pip wheel --require-hashes --no-deps --wheel-dir /wheels -r requirements.txt \
     && uv build --wheel --out-dir /wheels packages/contracts/python \
     && uv build --wheel --out-dir /wheels packages/fabric-auth \
     && uv build --wheel --out-dir /wheels packages/provenance \
     && uv build --wheel --out-dir /wheels packages/runtime-state \
     && uv build --wheel --out-dir /wheels services/worker
 
-FROM python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
 ARG SOURCE_REVISION=unknown
 LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 RUN groupadd --gid 10001 eda \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /app eda
 WORKDIR /app
 COPY --from=wheel-builder /wheels /wheels
-RUN python -m pip install --no-index --no-cache-dir /wheels/*.whl \
+# The wheels are the complete locked set from uv.lock, including its overrides, so pip installs them
+# as they are instead of re-resolving against narrower upstream pins.
+RUN python -m pip install --no-index --no-deps --no-cache-dir /wheels/*.whl \
     && rm -rf /wheels /root/.cache
 COPY .artifacts/model-contract.json /app/config/model-contract.json
 COPY .artifacts/tokenizer-calibration.json /app/config/tokenizer-calibration.json

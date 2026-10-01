@@ -26,6 +26,9 @@ dev = [
 package = false
 prerelease = "if-necessary-or-explicit"
 constraint-dependencies = ["cffi==2.0.0"]
+# redis-entraid 1.2.1 pins PyJWT~=2.13.0, which has HIGH and CRITICAL advisories fixed in 2.14.0.
+# Remove this override once a redis-entraid release accepts a fixed PyJWT.
+override-dependencies = ["pyjwt>=2.14.0,<2.15"]
 
 [tool.uv.workspace]
 members = [
