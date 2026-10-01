@@ -13,7 +13,7 @@ dev = [
   "hypothesis==6.161.0",
   "jsonschema==4.26.0",
   "license-expression==30.4.4",
-  "pyright==1.1.411",
+  "pyright==1.1.414",
   "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
