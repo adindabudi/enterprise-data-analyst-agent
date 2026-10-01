@@ -95,4 +95,40 @@ describe("auth bootstrap", () => {
       await screen.findByRole("button", { name: "Connect Fabric" }),
     ).toBeVisible();
   });
+
+  it("reports a paused capacity instead of a live connection", async () => {
+    installMatchMedia({ "(max-width: 1023px)": false });
+    const requested: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
+        requested.push(path);
+        const body = path.endsWith("/health/ready")
+          ? { status: "ready", featurePacks: { fabric: "configured" } }
+          : path.endsWith("/api/fabric/auth/status")
+            ? { provider: "ontology", state: "linked", chatQuery: true }
+            : path.endsWith("/api/fabric/source/status")
+              ? { capacity: "paused" }
+              : { status: "authenticated" };
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("Fabric capacity paused")).toBeVisible();
+    expect(screen.queryByText("Fabric connected for chat")).toBeNull();
+    expect(requested).toContain("/api/fabric/source/status");
+  });
 });

@@ -10,6 +10,7 @@ from eda_api.auth.models import AuthSessionRecord, Principal
 from eda_api.auth.repository import InMemoryAuthRepository
 from eda_api.config import Settings
 from eda_api.dependencies import settings as settings_dependency
+from eda_api.fabric_auth.capacity import CapacityMonitor, CapacityStatus
 from eda_api.fabric_auth.service import FabricAuthCoordinator
 from eda_api.main import create_app
 from eda_api.readiness.models import FabricPackStatus
@@ -724,4 +725,95 @@ def test_disabled_fabric_routes_return_not_found(owners: tuple[Principal, Princi
             headers=_headers(csrf),
             cookies={"eda_session": "auth_owner_a_1234567890", "eda_csrf": csrf},
         )
+        source = client.get("/api/fabric/source/status", cookies={"eda_session": "auth_owner_a_1234567890"})
     assert response.status_code == 404
+    assert source.status_code == 404
+
+
+class _OwnerTokens:
+    def __init__(self) -> None:
+        self.owners: list[tuple[UUID, UUID]] = []
+
+    async def acquire_for_owner(self, tenant_id: UUID, owner_object_id: UUID) -> str:
+        self.owners.append((tenant_id, owner_object_id))
+        return "owner-token"
+
+
+class _Handshake:
+    def __init__(self, error: BaseException | None = None) -> None:
+        self.error = error
+        self.calls = 0
+
+    async def probe_capacity(self, bearer_token: str) -> None:
+        del bearer_token
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+
+
+def test_source_status_reports_a_paused_capacity_to_a_linked_owner(
+    fabric_stack: tuple[TestClient, InMemoryFabricGrantRepository, _FakeTaskService],
+    owners: tuple[Principal, Principal],
+) -> None:
+    client, repository, _ = fabric_stack
+    tokens = _OwnerTokens()
+    handshake = _Handshake(RuntimeError("Internal error CapacityNotActive.Capacity [id] is not active"))
+    client.app.state.fabric_capacity = CapacityStatus(CapacityMonitor(), tokens=tokens, source=handshake)
+    asyncio.run(repository.create_grant(_grant(owners[0], FabricGrantState.LINKED)))
+
+    response = client.get("/api/fabric/source/status", cookies={"eda_session": "auth_owner_a_1234567890"})
+    again = client.get("/api/fabric/source/status", cookies={"eda_session": "auth_owner_a_1234567890"})
+
+    assert response.status_code == 200
+    assert response.json() == {"capacity": "paused"}
+    assert again.json() == {"capacity": "paused"}
+    # The probe used the asking owner's own grant, and the fresh observation served the repeat.
+    assert tokens.owners == [(owners[0].tenant_id, owners[0].owner_object_id)]
+    assert handshake.calls == 1
+
+
+def test_source_status_reports_a_running_capacity(
+    fabric_stack: tuple[TestClient, InMemoryFabricGrantRepository, _FakeTaskService],
+    owners: tuple[Principal, Principal],
+) -> None:
+    client, repository, _ = fabric_stack
+    client.app.state.fabric_capacity = CapacityStatus(CapacityMonitor(), tokens=_OwnerTokens(), source=_Handshake())
+    asyncio.run(repository.create_grant(_grant(owners[0], FabricGrantState.LINKED)))
+
+    response = client.get("/api/fabric/source/status", cookies={"eda_session": "auth_owner_a_1234567890"})
+
+    assert response.json() == {"capacity": "active"}
+
+
+@pytest.mark.parametrize("state", [None, FabricGrantState.REAUTH_REQUIRED])
+def test_source_status_never_probes_for_an_owner_without_a_live_link(
+    fabric_stack: tuple[TestClient, InMemoryFabricGrantRepository, _FakeTaskService],
+    owners: tuple[Principal, Principal],
+    state: FabricGrantState | None,
+) -> None:
+    client, repository, _ = fabric_stack
+    tokens = _OwnerTokens()
+    handshake = _Handshake()
+    client.app.state.fabric_capacity = CapacityStatus(CapacityMonitor(), tokens=tokens, source=handshake)
+    if state is not None:
+        asyncio.run(repository.create_grant(_grant(owners[0], state)))
+
+    response = client.get("/api/fabric/source/status", cookies={"eda_session": "auth_owner_a_1234567890"})
+
+    assert response.json() == {"capacity": "unknown"}
+    assert tokens.owners == []
+    assert handshake.calls == 0
+
+
+def test_source_status_is_unknown_when_no_queryable_source_is_wired(
+    fabric_stack: tuple[TestClient, InMemoryFabricGrantRepository, _FakeTaskService],
+    owners: tuple[Principal, Principal],
+) -> None:
+    client, repository, _ = fabric_stack
+    asyncio.run(repository.create_grant(_grant(owners[0], FabricGrantState.LINKED)))
+
+    response = client.get("/api/fabric/source/status", cookies={"eda_session": "auth_owner_a_1234567890"})
+
+    assert response.json() == {"capacity": "unknown"}
+    client.cookies.clear()
+    assert client.get("/api/fabric/source/status").status_code == 401

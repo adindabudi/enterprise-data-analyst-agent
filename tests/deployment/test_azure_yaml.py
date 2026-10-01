@@ -7,44 +7,18 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_azure_yaml_orchestrates_api_and_hosted_agent_in_safe_hook_order() -> None:
+def test_azure_yaml_deploys_only_the_api_with_the_analysis_runtime_in_safe_hook_order() -> None:
     manifest = yaml.safe_load((ROOT / "azure.yaml").read_text(encoding="utf-8"))
 
-    assert manifest["requiredVersions"] == {
-        "azd": ">=1.31.1",
-        "extensions": {"azure.ai.agents": ">=1.0.0-beta.11"},
-    }
-    assert set(manifest["services"]) == {"api", "ai-project", "long-job"}
-    assert manifest["services"]["api"]["docker"]["remoteBuild"] is True
-    assert manifest["services"]["ai-project"] == {
-        "host": "azure.ai.project",
-        "endpoint": "${FOUNDRY_PROJECT_ENDPOINT}",
-    }
-    hosted = manifest["services"]["long-job"]
-    assert hosted["host"] == "azure.ai.agent"
-    assert hosted["uses"] == ["ai-project"]
-    assert hosted["kind"] == "hosted"
-    assert hosted["protocols"] == [{"protocol": "responses", "version": "2.0.0"}]
-    assert hosted["container"] == {"resources": {"cpu": "0.5", "memory": "1Gi"}}
-    assert hosted["sessionConfiguration"] == {"idleTimeoutSeconds": 300}
-    assert hosted["image"] == "${EDA_WORKER_IMAGE}"
-    assert "docker" not in hosted
-    assert hosted["env"]["EDA_APP_ENV"] == "production"
-    assert hosted["env"]["ENABLE_CONSOLE_EXPORTERS"] == "false"
-    assert hosted["env"]["EDA_FOUNDRY_MODEL_DEPLOYMENT"] == "${AZURE_AI_MODEL_DEPLOYMENT_NAME}"
-    assert hosted["env"]["DOCUMENTS_ENABLED"] == "${DOCUMENTS_ENABLED=false}"
-    assert hosted["env"]["FABRIC_ENABLED"] == "${FABRIC_ENABLED=false}"
-    assert hosted["env"]["FABRIC_PROVIDER"] == "${FABRIC_PROVIDER=}"
-    assert hosted["env"]["FABRIC_KEY_VAULT_URL"] == "${FABRIC_KEY_VAULT_URL=}"
-    assert hosted["env"]["FABRIC_SIGNING_CERTIFICATE_NAME"] == (
-        "${FABRIC_SIGNING_CERTIFICATE_NAME=fabric-oauth-signing}"
-    )
-    assert hosted["env"]["FABRIC_CACHE_WRAP_KEY_NAME"] == "${FABRIC_CACHE_WRAP_KEY_NAME=fabric-cache-wrap}"
-    assert hosted["env"]["FABRIC_SEMANTIC_MODELS_JSON"] == "${FABRIC_SEMANTIC_MODELS_JSON=}"
-    assert hosted["env"]["FABRIC_ONTOLOGIES_JSON"] == "${FABRIC_ONTOLOGIES_JSON=}"
-    assert "={}}" not in (ROOT / "azure.yaml").read_text(encoding="utf-8")
-    assert "FABRIC_RUNTIME_ENABLED" not in hosted["env"]
-    assert "FOUNDRY_PROJECT_ENDPOINT" not in hosted["env"]
+    assert manifest["requiredVersions"] == {"azd": ">=1.31.1"}
+    assert set(manifest["services"]) == {"api"}
+    api = manifest["services"]["api"]
+    assert api["docker"]["remoteBuild"] is True
+    # The API image carries the analyst runtime, with skill bundles copied from the pinned worker image.
+    assert api["docker"]["buildArgs"] == ["EDA_WORKER_IMAGE=${EDA_WORKER_IMAGE}"]
+    manifest_text = (ROOT / "azure.yaml").read_text(encoding="utf-8")
+    assert "azure.ai.agent" not in manifest_text
+    assert "={}}" not in manifest_text
     assert manifest["infra"] == {
         "provider": "bicep",
         "path": "infra/bicep",
@@ -63,8 +37,7 @@ def test_azure_yaml_orchestrates_api_and_hosted_agent_in_safe_hook_order() -> No
         "&& ./scripts/configure-entra-federation.sh"
     )
     assert hooks["postdeploy"]["run"] == (
-        "uv run python scripts/bind-hosted-agent-rbac.py "
-        "&& ./scripts/doctor-documents.sh --phase postdeploy --output .artifacts/document-image-contract.json "
+        "./scripts/doctor-documents.sh --phase postdeploy --output .artifacts/document-image-contract.json "
         "&& ./scripts/publish-document-contract-job.sh && ./scripts/pin-application-images.sh "
         "&& ./scripts/run-fabric-provider-hook.sh postdeploy "
         "&& ./scripts/deploy-smoke.sh"

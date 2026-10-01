@@ -17,6 +17,7 @@ import {
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 
 import {
+  AnalysisRequestError,
   cancelAnalysis,
   createAnalysis,
   getFinalMessage,
@@ -24,23 +25,19 @@ import {
   readAnalysisHistory,
   taskIsRunning,
   steerAnalysis,
-  streamInteractiveChat,
   type AgentTodoItem,
   type SessionTask,
 } from "../api/analysis";
-import {
-  type Activity,
-  checkpointActivity,
-  withLatestActivity,
-} from "../chat/ActivityBlock";
-import { Composer, type ComposerRequest } from "../chat/Composer";
+import { type Activity, checkpointActivity } from "../chat/ActivityBlock";
+import { blockedUploadMessage, Composer } from "../chat/Composer";
 import { Conversation, type NarrativeMessage } from "../chat/Conversation";
-import { mergeDataSteps, readDataStep, type DataStep } from "../chat/DataSteps";
+import { mergeDataSteps, type DataStep } from "../chat/DataSteps";
 import { threadTitle } from "../chat/thread-title";
 import { useAnalysisUpload } from "../chat/useAnalysisUpload";
 import {
   fabricSourceName,
   type FabricAvailability,
+  type FabricCapacityView,
   type FabricSourceContext,
 } from "../features/fabric/source-context";
 import type { FabricAuthorizationStatus } from "../api/fabric";
@@ -72,13 +69,36 @@ function requestKey(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+type LiveTodo = Extract<
+  TaskStreamEvent,
+  { type: "todo.updated" }
+>["payload"][number];
+
+/** The plan from a `todo.updated` event, in the shape the Tasks panel shows. */
+export function liveTodoItems(items: readonly LiveTodo[]): AgentTodoItem[] {
+  return items.map((item, index) => {
+    const id = Number(item.todoId);
+    return {
+      id: Number.isInteger(id) ? id : index,
+      title: item.text,
+      description: item.description ?? null,
+      isComplete: item.completed,
+    };
+  });
+}
+
 export function DesktopWorkspace({
   fabricAvailability = "disabled",
   fabricAuthorization,
+  fabricCapacity,
+  onRunSettled,
   compact = false,
 }: {
   fabricAvailability?: FabricAvailability;
   fabricAuthorization?: FabricAuthorizationStatus;
+  fabricCapacity?: FabricCapacityView;
+  /** A run just ended, so what it learned about the source is worth showing. */
+  onRunSettled?: () => void;
   compact?: boolean;
 }) {
   const fabricSource: FabricSourceContext = {
@@ -86,7 +106,12 @@ export function DesktopWorkspace({
     ...(fabricAuthorization === undefined
       ? {}
       : { authorization: fabricAuthorization }),
+    ...(fabricCapacity === undefined ? {} : { capacity: fabricCapacity }),
   };
+  const runSettled = useRef(onRunSettled);
+  useEffect(() => {
+    runSettled.current = onRunSettled;
+  }, [onRunSettled]);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const navigationTrigger = useRef<HTMLButtonElement>(null);
@@ -114,21 +139,12 @@ export function DesktopWorkspace({
       : [],
   );
   const [dataSteps, setDataSteps] = useState<DataStep[]>([]);
-  // The stream callback outlives a render, so the latest steps cannot be read from state.
-  const dataStepsRef = useRef<DataStep[]>([]);
-  const recordDataStep = (step: DataStep): void => {
-    dataStepsRef.current = [
-      ...dataStepsRef.current.filter((item) => item.stepId !== step.stepId),
-      step,
-    ];
-    setDataSteps(dataStepsRef.current);
-  };
   const clearDataSteps = (): void => {
-    dataStepsRef.current = [];
     setDataSteps([]);
   };
   const [runStartedAt, setRunStartedAt] = useState<number>();
   const [todoItems, setTodoItems] = useState<AgentTodoItem[]>([]);
+  const liveTodoRevision = useRef(0);
   const [announcement, setAnnouncement] = useState("Workspace ready");
   const [streamedText, setStreamedText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -162,21 +178,10 @@ export function DesktopWorkspace({
   );
   const [threadKey, setThreadKey] = useState(0);
   const threadGeneration = useRef(0);
-  const interactiveAbort = useRef<AbortController | null>(null);
-
-  useEffect(
-    () => () => {
-      interactiveAbort.current?.abort();
-    },
-    [],
-  );
-
   useEffect(() => {
     if (!restored) return;
     const { session, history: saved, taskId: savedTaskId } = restored;
     threadGeneration.current += 1;
-    interactiveAbort.current?.abort();
-    interactiveAbort.current = null;
     setActiveSessionId(session.sessionId);
     setSessionTitle(session.title);
     setMessages((previous) => {
@@ -270,7 +275,13 @@ export function DesktopWorkspace({
       if (event.type === "artifact.ready") {
         refreshDetails();
       }
+      if (event.type === "todo.updated") {
+        // The plan as the agent writes it; the stored copy is only saved once the run ends.
+        liveTodoRevision.current += 1;
+        setTodoItems(liveTodoItems(event.payload));
+      }
       if (event.type === "run.completed") {
+        runSettled.current?.();
         taskView.current = {
           ...taskView.current,
           fabricAuthAction: undefined,
@@ -317,6 +328,7 @@ export function DesktopWorkspace({
         }
       }
       if (event.type === "run.failed" || event.type === "run.cancelled") {
+        runSettled.current?.();
         refreshDetails();
         setStatus(
           event.type === "run.failed"
@@ -354,9 +366,12 @@ export function DesktopWorkspace({
   useEffect(() => {
     if (!activeSessionId) return;
     let active = true;
+    const revision = liveTodoRevision.current;
     void listSessionTodos(activeSessionId)
       .then((items) => {
-        if (active) setTodoItems(items);
+        // A live plan that arrived while this request was in flight is newer than the stored one.
+        if (active && liveTodoRevision.current === revision)
+          setTodoItems(items);
       })
       .catch(() => undefined);
     void readAnalysisHistory(activeSessionId)
@@ -401,8 +416,6 @@ export function DesktopWorkspace({
   const startNewChat = (): void => {
     const detachedBackgroundTask = isRunning && taskId !== null;
     threadGeneration.current += 1;
-    interactiveAbort.current?.abort();
-    interactiveAbort.current = null;
     history.clear();
     setNavigationOpen(false);
     setDetailsOpen(false);
@@ -433,9 +446,18 @@ export function DesktopWorkspace({
     setFabricAuthAction(undefined);
   };
 
-  const sendMessage = (text: string, request: ComposerRequest): void => {
+  const announceUploadBlocked = (): void => {
+    const message = blockedUploadMessage(inputUpload.upload);
+    setStatus(message);
+    setAnnouncement(message);
+  };
+
+  const sendMessage = (text: string): void => {
     if (isRestoring || history.loading || history.error) return;
-    if (inputUpload.upload && inputUpload.upload.state !== "clean") return;
+    if (inputUpload.upload && inputUpload.upload.state !== "clean") {
+      announceUploadBlocked();
+      return;
+    }
     const generation = threadGeneration.current;
     const isCurrentThread = (): boolean =>
       threadGeneration.current === generation;
@@ -467,185 +489,19 @@ export function DesktopWorkspace({
     clearDataSteps();
     setTaskId(null);
     setTodoItems([]);
-    setStatus(request.deepAnalysis ? "Starting analysis" : "Connecting");
-    setAnnouncement(
-      request.deepAnalysis ? "Analysis started" : "Connecting to agent",
-    );
+    setStatus("Working");
+    setAnnouncement("Request sent");
     setIsSubmitting(true);
     setIsRunning(true);
     setRunStartedAt(Date.now());
-    if (!request.deepAnalysis) {
-      setTaskId(null);
-      window.history.replaceState(null, "", "/");
-      // Sending is allowed mid-run now, and two live streams would interleave into one reply.
-      interactiveAbort.current?.abort();
-      const controller = new AbortController();
-      interactiveAbort.current = controller;
-      const chunks: string[] = [];
-      let handoffTaskId: string | null = null;
-      void streamInteractiveChat(
-        turnTitle,
-        text,
-        conversationHistory,
-        requestKey("chat"),
-        controller.signal,
-        (update) => {
-          if (!isCurrentThread()) return;
-          if (update.event === "status") {
-            const message = update.data.message ?? "Agent is thinking";
-            setStatus(message);
-            setAnnouncement(message);
-            setActivities((current) =>
-              withLatestActivity(
-                current,
-                message,
-                update.data.state,
-                update.data.detail,
-              ),
-            );
-          }
-          if (update.event === "delta" && update.data.text) {
-            chunks.push(update.data.text);
-            setStreamedText(chunks.join(""));
-            setStatus("Agent is responding");
-          }
-          if (update.event === "analysis_started" && update.data.taskId) {
-            handoffTaskId = update.data.taskId;
-            setSessionTaskIds((current) =>
-              [...new Set([...current, update.data.taskId ?? ""])].filter(
-                Boolean,
-              ),
-            );
-            const steps = dataStepsRef.current;
-            if (steps.length > 0) {
-              setMessages((current) =>
-                current.map((message) =>
-                  message.id === questionId ? { ...message, steps } : message,
-                ),
-              );
-            }
-            clearDataSteps();
-            chunks.length = 0;
-            setStreamedText("");
-            setTaskId(update.data.taskId);
-            window.history.replaceState(
-              null,
-              "",
-              `/?task=${encodeURIComponent(update.data.taskId)}`,
-            );
-            setStatus("Running a deeper analysis");
-            setAnnouncement("Running a deeper analysis");
-            setActivities([
-              {
-                id: "analysis-handoff",
-                label: "Running a deeper analysis",
-                status: "running",
-                detail:
-                  "The request needs data, code, artifacts, or durable execution.",
-              },
-            ]);
-          }
-          if (update.event === "data_step") {
-            const step = readDataStep(update.data);
-            if (step) recordDataStep(step);
-          }
-          if (update.event === "completed") {
-            const responseText = chunks.join("").trim();
-            const messageId = update.data.messageId;
-            // Read before the reset below: React runs this updater after the handler returns.
-            const steps = dataStepsRef.current;
-            if (responseText && messageId) {
-              setMessages((current) => [
-                ...current,
-                {
-                  id: messageId,
-                  role: "assistant",
-                  text: responseText,
-                  // The reads belong to the answer they produced, not to the next question.
-                  ...(steps.length > 0 ? { steps } : {}),
-                },
-              ]);
-            }
-            clearDataSteps();
-            setStreamedText("");
-            setStatus("Ready");
-            setActivities([]);
-            setIsRunning(false);
-            setAnnouncement("Response completed");
-          }
-          if (update.event === "failed") {
-            const message = update.data.message ?? "Response failed";
-            const steps = dataStepsRef.current;
-            if (steps.length > 0) {
-              setMessages((current) =>
-                current.map((item) =>
-                  item.id === questionId ? { ...item, steps } : item,
-                ),
-              );
-            }
-            clearDataSteps();
-            setStatus(message);
-            setAnnouncement(message);
-            setActivities((current) =>
-              current.length > 0
-                ? current.map((activity) => ({ ...activity, status: "failed" }))
-                : [
-                    {
-                      id: "interactive-failed",
-                      label: message,
-                      status: "failed",
-                    },
-                  ],
-            );
-            setIsRunning(false);
-          }
-        },
-        activeSessionId ?? undefined,
-      )
-        .then((identity) => {
-          if (!isCurrentThread()) return;
-          setActiveSessionId(identity.sessionId);
-          history.refreshList();
-          window.history.replaceState(
-            null,
-            "",
-            `/?session=${encodeURIComponent(identity.sessionId)}${handoffTaskId ? `&task=${encodeURIComponent(handoffTaskId)}` : ""}`,
-          );
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === questionId
-                ? { ...message, id: identity.messageId }
-                : message,
-            ),
-          );
-        })
-        .catch((error: unknown) => {
-          if (!isCurrentThread()) return;
-          if (error instanceof DOMException && error.name === "AbortError") {
-            setStatus("Response stopped");
-          } else {
-            setStatus("Response could not start");
-          }
-          setStreamedText("");
-          setActivities([]);
-          clearDataSteps();
-          setIsRunning(false);
-        })
-        .finally(() => {
-          if (!isCurrentThread()) return;
-          if (interactiveAbort.current === controller)
-            interactiveAbort.current = null;
-          setIsSubmitting(false);
-        });
-      return;
-    }
+    const uploadIds = inputUpload.inputUploadIds;
     void createAnalysis(
       turnTitle,
       text,
       requestKey("analysis"),
       conversationHistory,
       activeSessionId ?? undefined,
-      inputUpload.inputUploadIds,
+      uploadIds,
     )
       .then((identity) => {
         if (!isCurrentThread()) return;
@@ -667,13 +523,15 @@ export function DesktopWorkspace({
           "",
           `/?session=${encodeURIComponent(identity.sessionId)}&task=${encodeURIComponent(identity.taskId)}`,
         );
-        setStatus("Agent is thinking");
-        setAnnouncement("Agent is thinking");
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!isCurrentThread()) return;
-        setStatus("Analysis could not start");
-        setAnnouncement("Analysis could not start");
+        const message =
+          error instanceof AnalysisRequestError && error.status === 429
+            ? "The analysis queue is full. Try again shortly."
+            : "Analysis could not start";
+        setStatus(message);
+        setAnnouncement(message);
         setIsRunning(false);
       })
       .finally(() => {
@@ -682,16 +540,6 @@ export function DesktopWorkspace({
   };
 
   const stop = (): void => {
-    if (interactiveAbort.current) {
-      interactiveAbort.current.abort();
-      interactiveAbort.current = null;
-      setStatus("Response stopped");
-      setIsRunning(false);
-      setStreamedText("");
-      setActivities([]);
-      clearDataSteps();
-      return;
-    }
     if (!taskId) return;
     void cancelAnalysis(taskId, requestKey("cancel"))
       .then(() => {
@@ -709,8 +557,6 @@ export function DesktopWorkspace({
   const openSession = (sessionId: string): void => {
     setNavigationOpen(false);
     threadGeneration.current += 1;
-    interactiveAbort.current?.abort();
-    interactiveAbort.current = null;
     setTaskId(null);
     setActiveSessionId(null);
     setMessages([]);
@@ -951,13 +797,12 @@ export function DesktopWorkspace({
             void inputUpload.refresh();
           }}
           onClearAttachment={inputUpload.clear}
+          onBlockedUploadSend={announceUploadBlocked}
           onAttach={(file) => {
             void inputUpload.attach(file);
           }}
           onSend={sendMessage}
-          {...(interactiveAbort.current !== null || taskId !== null
-            ? { onStop: stop }
-            : {})}
+          {...(taskId !== null ? { onStop: stop } : {})}
         />
       </main>
       {!compact && (

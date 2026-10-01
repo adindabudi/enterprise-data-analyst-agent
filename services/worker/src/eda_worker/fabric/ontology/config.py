@@ -18,6 +18,8 @@ class OntologyTarget(BaseModel):
     ontology_id: UUID = Field(alias="ontologyId")
     # The API reads the same document and pins the graph here; both readers forbid extras.
     graph_model_id: UUID | None = Field(default=None, alias="graphModelId")
+    # Read only by the API, whose time-series tool reaches this KQL database; declared so the shared document parses.
+    kql_database_id: UUID | None = Field(default=None, alias="kqlDatabaseId")
     description: str = Field(min_length=1, max_length=240, pattern=r"^[^\r\n\x00-\x1f<>]+$")
     routing_terms: tuple[str, ...] = Field(default=(), alias="routingTerms", max_length=64)
     private_link_zone: str | None = Field(default=None, alias="privateLinkZone", pattern=r"^z[0-9]{1,3}$")

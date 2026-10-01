@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "pin-application-images.sh"
 
 
-def test_api_revision_is_promoted_with_hosted_agent_gates_and_worker_digest() -> None:
+def test_api_revision_is_promoted_with_analysis_runtime_and_sandbox_settings() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
     api_update = script.index('az containerapp update --name "$api_name"')
     image_manifest = script.index('temporary_manifest="$(mktemp')
@@ -17,6 +17,12 @@ def test_api_revision_is_promoted_with_hosted_agent_gates_and_worker_digest() ->
     assert '--image "$api_image"' in promoted_slice
     for binding in (
         'EDA_WORKER_IMAGE_DIGEST="$worker_digest"',
+        'EDA_SANDBOX_SUBSCRIPTION_ID="$sandbox_subscription_id"',
+        'EDA_SANDBOX_RESOURCE_GROUP="$sandbox_resource_group"',
+        'EDA_SANDBOX_GROUP="$sandbox_group"',
+        'EDA_SANDBOX_REGION="$sandbox_region"',
+        'EDA_SANDBOX_DISK_IMAGE_ID="$sandbox_disk_image_id"',
+        "EDA_ANALYSIS_RUNTIME_ENABLED=true",
         "EDA_MODEL_CONTRACT_VERIFIED=true",
         "EDA_TOKENIZER_CALIBRATED=true",
         "EDA_HOSTED_AGENT_ENABLED=true",
@@ -31,6 +37,12 @@ def test_script_verifies_promoted_api_readiness_environment() -> None:
 
     for name in (
         "EDA_WORKER_IMAGE_DIGEST",
+        "EDA_SANDBOX_SUBSCRIPTION_ID",
+        "EDA_SANDBOX_RESOURCE_GROUP",
+        "EDA_SANDBOX_GROUP",
+        "EDA_SANDBOX_REGION",
+        "EDA_SANDBOX_DISK_IMAGE_ID",
+        "EDA_ANALYSIS_RUNTIME_ENABLED",
         "EDA_MODEL_CONTRACT_VERIFIED",
         "EDA_TOKENIZER_CALIBRATED",
         "EDA_HOSTED_AGENT_ENABLED",
@@ -74,3 +86,16 @@ def test_worker_image_comes_from_the_prebuilt_immutable_environment_value() -> N
         'worker_source_image="${registry_login_server}/enterprise-data-analyst/eda-worker:${environment_name}"'
         not in script
     )
+
+
+def test_sandbox_settings_are_required_from_azd_environment() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    for name in (
+        "EDA_SANDBOX_SUBSCRIPTION_ID",
+        "EDA_SANDBOX_RESOURCE_GROUP",
+        "EDA_SANDBOX_GROUP",
+        "EDA_SANDBOX_REGION",
+        "EDA_SANDBOX_DISK_IMAGE_ID",
+    ):
+        assert f"azd_value {name}" in script

@@ -9,6 +9,7 @@ from eda_api.config import Settings
 from eda_api.dependencies import settings
 from eda_api.readiness.models import FabricPackStatus
 
+from .capacity import CapacityStatus
 from .service import FabricAuthCoordinator
 
 
@@ -38,7 +39,13 @@ def fabric_chat_query(request: Request) -> bool:
     return getattr(request.app.state, "fabric_chat_query", False) is True
 
 
+def fabric_capacity(request: Request) -> CapacityStatus | None:
+    capacity = getattr(request.app.state, "fabric_capacity", None)
+    return capacity if isinstance(capacity, CapacityStatus) else None
+
+
 FabricProviderDep = Annotated[FabricProvider, Depends(fabric_provider)]
 FabricAuthServiceDep = Annotated[FabricAuthCoordinator, Depends(fabric_auth_service)]
 FabricAvailableDep = Annotated[None, Depends(fabric_available)]
 FabricChatQueryDep = Annotated[bool, Depends(fabric_chat_query)]
+FabricCapacityDep = Annotated[CapacityStatus | None, Depends(fabric_capacity)]

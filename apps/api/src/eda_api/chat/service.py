@@ -23,6 +23,7 @@ from eda_api.chat.provenance import (
     sha256,
 )
 from eda_api.chat.sessions import InteractiveSessionStore
+from eda_api.fabric_auth.query_reuse import TaskQueryCoalescer, query_fingerprint
 
 ANALYSIS_ROUTING_VERSION = "gpt-5.6-terra-auto-v3"
 # execute_in_sandbox accepts at most ten input artifacts.
@@ -449,6 +450,8 @@ class MafInteractiveChatService:
         chunks: list[str] = []
         handoff = _AnalysisHandoff()
         ledger = _QueryLedger(initial=prior_runs)
+        # One turn is one task: the same question asked twice reaches the source once.
+        coalescer = TaskQueryCoalescer()
         events: asyncio.Queue[InteractiveChatUpdate | None] = asyncio.Queue()
         steps = _DataStepRecorder(
             events,
@@ -475,7 +478,9 @@ class MafInteractiveChatService:
                 )
             if schema.strip():
                 tools.append(
-                    _fabric_query_tool(self._fabric_query, partition, events, schema, ledger, message_id, steps)
+                    _fabric_query_tool(
+                        self._fabric_query, partition, events, schema, ledger, message_id, steps, coalescer
+                    )
                 )
                 if self._graph_query is not None:
                     tools.append(
@@ -489,6 +494,7 @@ class MafInteractiveChatService:
                             message_id,
                             steps,
                             self._fabric_query.alias,
+                            coalescer,
                         )
                     )
             else:
@@ -703,6 +709,7 @@ def _graph_query_tool(
     message_id: str,
     steps: _DataStepRecorder,
     alias: str,
+    coalescer: TaskQueryCoalescer,
 ) -> Any:
     description = GRAPH_QUERY_DESCRIPTION
     schema_text = _source_reference_text(schema)
@@ -726,14 +733,18 @@ def _graph_query_tool(
     async def query_graph(query: str) -> dict[str, str]:
         query = query.strip()
         step = await steps.start(kind="gql", label=f"Queried {alias} graph", query=query, source=alias)
-        await events.put(
-            InteractiveChatUpdate(
-                event="status",
-                data={"message": "Querying the configured source", "detail": "Running one read-only graph query."},
+
+        async def execute() -> str:
+            await events.put(
+                InteractiveChatUpdate(
+                    event="status",
+                    data={"message": "Querying the configured source", "detail": "Running one read-only graph query."},
+                )
             )
-        )
+            return await service.execute(partition, query)
+
         try:
-            rows = await service.execute(partition, query)
+            outcome = await coalescer.run(query_fingerprint(partition, source=alias, route="gql", query=query), execute)
         except asyncio.CancelledError:
             await steps.fail(step, "Query cancelled; completion was not confirmed.")
             raise
@@ -741,11 +752,40 @@ def _graph_query_tool(
             logger.exception("interactive graph query failed: %s", error)
             await steps.fail(step, str(error))
             return {"status": "error", "detail": str(error)}
+        rows = outcome.rows
         await steps.finish(step, rows)
         ledger.record(QueryRun(query=query, rows=rows, source_alias=alias, message_id=message_id, kind="gql"))
         return {"status": "ok", "rows": rows}
 
     return query_graph
+
+
+class _EmptyQueryResult(RuntimeError):
+    """The provider's stream completed without rows.
+
+    Raised rather than returned so an outcome that carries no evidence is never
+    stored as this task's answer to the question.
+    """
+
+
+async def _stream_ontology_rows(
+    service: FabricQueryService,
+    partition: TaskPartition,
+    question: str,
+    events: asyncio.Queue[InteractiveChatUpdate | None],
+) -> str:
+    rows: str | None = None
+    async for update in service.stream(partition, question):
+        if update.status is not None:
+            status = {"message": update.status}
+            if update.detail is not None:
+                status["detail"] = update.detail
+            await events.put(InteractiveChatUpdate(event="status", data=status))
+        if update.result is not None:
+            rows = update.result
+    if not rows:
+        raise _EmptyQueryResult
+    return rows
 
 
 def _fabric_query_tool(
@@ -756,6 +796,7 @@ def _fabric_query_tool(
     ledger: _QueryLedger,
     message_id: str,
     steps: _DataStepRecorder,
+    coalescer: TaskQueryCoalescer,
 ) -> Any:
     alias = service.alias
     description = (
@@ -783,26 +824,23 @@ def _fabric_query_tool(
             detail = f"unknown source '{source}'; the configured source is '{alias}'"
             await steps.fail(step, detail)
             return {"status": "error", "detail": detail}
-        rows: str | None = None
+        rows = ""
         try:
-            async for update in service.stream(partition, question):
-                if update.status is not None:
-                    status = {"message": update.status}
-                    if update.detail is not None:
-                        status["detail"] = update.detail
-                    await events.put(InteractiveChatUpdate(event="status", data=status))
-                if update.result is not None:
-                    rows = update.result
+            outcome = await coalescer.run(
+                query_fingerprint(partition, source=alias, route="ontology_search", query=question),
+                lambda: _stream_ontology_rows(service, partition, question, events),
+            )
+            rows = outcome.rows
         except asyncio.CancelledError:
             await steps.fail(step, "Query cancelled; completion was not confirmed.")
             raise
+        except _EmptyQueryResult:
+            await steps.fail(step, "the Fabric query returned no rows")
+            return {"status": "error", "detail": "the Fabric query returned no rows"}
         except Exception:
             logger.exception("interactive Fabric query failed")
             await steps.fail(step, "the Fabric query failed")
             return {"status": "error", "detail": "the Fabric query failed"}
-        if not rows:
-            await steps.fail(step, "the Fabric query returned no rows")
-            return {"status": "error", "detail": "the Fabric query returned no rows"}
         await steps.finish(step, rows)
         ledger.record(
             QueryRun(query=question, rows=rows, source_alias=alias, message_id=message_id, kind="ontology_search")

@@ -35,6 +35,9 @@ test("configured ontology metadata drives new titles and Inputs without changing
       json: { provider: "ontology", state: "linked", chatQuery: true, source },
     });
   });
+  await page.route("**/api/fabric/source/status", async (route) => {
+    await route.fulfill({ json: { capacity: "active" } });
+  });
   await openAuthenticatedWorkspace(page, testInfo);
 
   for (const metadata of [
@@ -57,9 +60,7 @@ test("configured ontology metadata drives new titles and Inputs without changing
       inputs.getByText(metadata.description, { exact: true }),
     ).toBeVisible();
     await expect(
-      inputs.getByText(
-        "Answers chat questions; deep analysis awaits acceptance",
-      ),
+      inputs.getByText("Connected; acceptance pending"),
     ).toBeVisible();
     await page.screenshot({
       path: `/tmp/eda-source-${testInfo.project.name}-${metadata.alias}.png`,
@@ -103,6 +104,124 @@ test("configured ontology metadata drives new titles and Inputs without changing
   await expect(
     page.getByText("Logistics shipment ontology", { exact: true }),
   ).toHaveCount(0);
+  await expectNoBrowserSecrets(page);
+});
+
+test("a paused capacity replaces the connected state, including when a run finds it", async ({
+  page,
+}, testInfo) => {
+  let capacity: "active" | "paused" = "paused";
+  let capacityReads = 0;
+  await page.route("**/health/ready", async (route) => {
+    await route.fulfill({
+      json: { status: "ready", featurePacks: { fabric: "configured" } },
+    });
+  });
+  await page.route("**/api/fabric/auth/status", async (route) => {
+    await route.fulfill({
+      json: {
+        provider: "ontology",
+        state: "linked",
+        chatQuery: true,
+        source: {
+          alias: "lamna-healthcare",
+          description: "Lamna healthcare operations ontology",
+        },
+      },
+    });
+  });
+  await page.route("**/api/fabric/source/status", async (route) => {
+    capacityReads += 1;
+    await route.fulfill({ json: { capacity } });
+  });
+  await openAuthenticatedWorkspace(page, testInfo);
+  const bar = page.getByRole("banner");
+
+  await expect(bar.getByText("Fabric capacity paused")).toBeVisible();
+  await expect(bar.getByText("Fabric connected for chat")).toHaveCount(0);
+  if (isMobileProject(testInfo))
+    await page.getByRole("button", { name: "Open workspace" }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Inputs", exact: true })
+      .getByText("Capacity paused; queries can't run until it's resumed"),
+  ).toBeVisible();
+  await page.screenshot({
+    path: `/tmp/eda-capacity-paused-${testInfo.project.name}.png`,
+    animations: "disabled",
+  });
+
+  // Resumed: the next page load shows the connection again.
+  capacity = "active";
+  await page.reload();
+  await expect(bar.getByText("Fabric connected for chat")).toBeVisible();
+
+  // Paused while a run was reading the source: the run's end brings the pause into view.
+  await page.route(
+    "**/api/tasks/task_e2e_12345678/artifacts",
+    async (route) => {
+      await route.fulfill({ json: { artifacts: [] } });
+    },
+  );
+  await page.route(
+    "**/api/tasks/task_e2e_12345678/provenance",
+    async (route) => {
+      await route.fulfill({ json: { artifacts: [], sourceQueries: [] } });
+    },
+  );
+  let eventRequests = 0;
+  let finishTask: () => void = () => undefined;
+  const terminalReady = new Promise<void>((resolve) => {
+    finishTask = resolve;
+  });
+  const envelope = {
+    sessionId: "ses_e2e_12345678",
+    taskId: "task_e2e_12345678",
+    occurredAt: "2026-09-24T00:00:00Z",
+    provenanceRefs: [],
+  };
+  await page.route("**/api/tasks/task_e2e_12345678/events", async (route) => {
+    eventRequests += 1;
+    if (eventRequests === 1) {
+      const progress = {
+        ...envelope,
+        eventId: "evt_query_12345678",
+        sequence: 1,
+        type: "analysis_progress",
+        payload: {
+          milestone: "Querying the source",
+          state: "started",
+          detail: "Running query_graph.",
+        },
+      };
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: `retry: 50\nid: 1-0\nevent: analysis_progress\ndata: ${JSON.stringify(progress)}\n\n`,
+      });
+      return;
+    }
+    await terminalReady;
+    const terminal = {
+      ...envelope,
+      eventId: "evt_terminal_12345678",
+      sequence: 2,
+      type: "run.completed",
+      payload: { status: "completed", finalMessageId: "msg_final_12345678" },
+    };
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body: `id: 2-0\nevent: run.completed\ndata: ${JSON.stringify(terminal)}\n\n`,
+    });
+  });
+  await page.goto("/?task=task_e2e_12345678");
+  await expect(bar.getByText("Fabric connected for chat")).toBeVisible();
+  const readsBeforeRunEnded = capacityReads;
+
+  capacity = "paused";
+  finishTask();
+
+  await expect(bar.getByText("Fabric capacity paused")).toBeVisible();
+  expect(capacityReads).toBeGreaterThan(readsBeforeRunEnded);
   await expectNoBrowserSecrets(page);
 });
 

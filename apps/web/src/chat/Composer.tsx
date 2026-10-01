@@ -5,15 +5,12 @@ import {
   MenuList,
   MenuPopover,
   MenuTrigger,
-  Text,
   Textarea,
   Tooltip,
 } from "@fluentui/react-components";
 import {
   AddRegular,
   AttachRegular,
-  BrainCircuitRegular,
-  DismissRegular,
   SendRegular,
   StopRegular,
 } from "@fluentui/react-icons";
@@ -22,9 +19,22 @@ import { useRef, useState } from "react";
 import { InputUploadStatus } from "./InputUploadStatus";
 import type { InputUpload } from "./useAnalysisUpload";
 
-export type ComposerRequest = {
-  deepAnalysis: boolean;
-};
+export type ComposerRequest = Record<string, never>;
+
+const SCAN_IN_PROGRESS = new Set<InputUpload["state"]>([
+  "pending",
+  "uploading",
+  "scanning",
+]);
+
+/** Why a message cannot be sent with this attachment, in words that say what to do next. */
+export function blockedUploadMessage(
+  attachment: InputUpload | undefined,
+): string {
+  return attachment !== undefined && SCAN_IN_PROGRESS.has(attachment.state)
+    ? "Wait for the file scan to finish"
+    : "Remove the file to send without it";
+}
 
 type ComposerProps = {
   disabled: boolean;
@@ -37,6 +47,7 @@ type ComposerProps = {
   refreshingAttachment?: boolean;
   onRefreshAttachment?: () => void;
   onClearAttachment?: () => void;
+  onBlockedUploadSend?: () => void;
 };
 
 export function Composer({
@@ -50,23 +61,29 @@ export function Composer({
   refreshingAttachment,
   onRefreshAttachment,
   onClearAttachment,
+  onBlockedUploadSend,
 }: ComposerProps) {
   const [value, setValue] = useState("");
-  const [deepAnalysis, setDeepAnalysis] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadBlocked =
     attachment !== undefined && attachment.state !== "clean";
+  const sendLabel = uploadBlocked
+    ? blockedUploadMessage(attachment)
+    : running
+      ? "Send to the running analysis"
+      : "Send message";
   const clearContext = (): void => {
     onClearAttachment?.();
-    setDeepAnalysis(false);
     if (fileInput.current) fileInput.current.value = "";
   };
   const send = (): void => {
     const message = value.trim();
-    if (!message || disabled || uploadBlocked) return;
-    onSend?.(message, {
-      deepAnalysis: deepAnalysis || attachment !== undefined,
-    });
+    if (!message || disabled) return;
+    if (uploadBlocked) {
+      onBlockedUploadSend?.();
+      return;
+    }
+    onSend?.(message, {});
     setValue("");
     clearContext();
   };
@@ -90,27 +107,13 @@ export function Composer({
           placeholder="Ask about your analysis"
           disabled={disabled && !running}
         />
-        {attachment ? (
+        {attachment && (
           <InputUploadStatus
             upload={attachment}
             refreshing={refreshingAttachment}
             onRefresh={onRefreshAttachment}
             onRemove={clearContext}
           />
-        ) : (
-          deepAnalysis && (
-            <div className="composer__context">
-              <BrainCircuitRegular aria-hidden="true" />
-              <Text size={200}>Deep analysis enabled</Text>
-              <Button
-                appearance="subtle"
-                aria-label="Use automatic mode"
-                icon={<DismissRegular />}
-                onClick={clearContext}
-                size="small"
-              />
-            </div>
-          )
         )}
       </div>
       <div
@@ -127,7 +130,6 @@ export function Composer({
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             if (!file || !onAttach) return;
-            setDeepAnalysis(true);
             onAttach(file);
           }}
         />
@@ -152,26 +154,15 @@ export function Composer({
               >
                 Attach file
               </MenuItem>
-              <MenuItem
-                icon={<BrainCircuitRegular />}
-                onClick={() => {
-                  setDeepAnalysis(true);
-                }}
-              >
-                Deep analysis
-              </MenuItem>
             </MenuList>
           </MenuPopover>
         </Menu>
-        <Tooltip
-          content={running ? "Send to the running analysis" : "Send message"}
-          relationship="label"
-        >
+        <Tooltip content={sendLabel} relationship="label">
           <Button
             appearance="primary"
             className="composer__command composer__send"
             icon={<SendRegular />}
-            aria-label="Send message"
+            aria-label={sendLabel}
             disabled={disabled || uploadBlocked || !value.trim()}
             onClick={send}
           />

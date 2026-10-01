@@ -30,6 +30,10 @@ variable "tags" {
   type = map(string)
 }
 
+variable "web_identity_principal_id" {
+  type = string
+}
+
 locals {
   resource_group_id          = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group_name}"
   sandbox_data_owner_role_id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/c24cf47c-5077-412d-a19c-45202126392c"
@@ -76,6 +80,13 @@ resource "azapi_resource" "vnet_connection" {
 
 resource "azurerm_role_assignment" "provisioning_sandbox_data_owner" {
   principal_id       = var.provisioning_principal_id
+  role_definition_id = local.sandbox_data_owner_role_id
+  scope              = azapi_resource.group.id
+}
+
+resource "azurerm_role_assignment" "web_sandbox_data_owner" {
+  principal_id       = var.web_identity_principal_id
+  principal_type     = "ServicePrincipal"
   role_definition_id = local.sandbox_data_owner_role_id
   scope              = azapi_resource.group.id
 }

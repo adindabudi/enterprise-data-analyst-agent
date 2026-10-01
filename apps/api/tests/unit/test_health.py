@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from eda_api.config import Settings
 from eda_api.readiness.models import (
     DocumentFeatureState,
@@ -25,12 +27,33 @@ def test_readiness_fails_closed_with_explicit_blocked_components(client: TestCli
         "blob": "configured",
         "redis": "configured",
         "foundry": "blocked",
-        "hostedAgent": "blocked",
+        "analysisRuntime": "blocked",
         "sandbox": "blocked",
         "auth": "blocked",
     }
     assert payload["featurePacks"]["core"] == "blocked"
     assert payload["featurePacks"]["fabric"] == "disabled"
+
+
+def test_platform_readiness_waits_for_the_analysis_runtime(client: TestClient) -> None:
+    class Supervisor:
+        state = "starting"
+
+        def readiness(self) -> str:
+            return self.state
+
+    supervisor = Supervisor()
+    client.app.state.analysis = SimpleNamespace(supervisor=supervisor)  # type: ignore[attr-defined]
+
+    starting = client.get("/health/platform-ready")
+    supervisor.state = "ready"
+    ready = client.get("/health/platform-ready")
+
+    # A revision takes traffic only once it can run tasks; liveness never depends on it.
+    assert starting.status_code == 503 and starting.json() == {"status": "starting"}
+    assert ready.status_code == 200 and ready.json() == {"status": "alive"}
+    assert client.get("/health/live").status_code == 200
+    assert client.get("/health/ready").json()["components"]["analysisRuntime"] == "ready"
 
 
 def test_core_ready_configuration_requires_every_gate(settings: Settings) -> None:

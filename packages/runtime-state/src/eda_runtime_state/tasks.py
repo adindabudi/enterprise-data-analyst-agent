@@ -16,6 +16,7 @@ from .models import (
     OperationKeyInput,
     OperationRecord,
     OperationStatus,
+    QueryResultRef,
     RequiredOutput,
     RuntimeLocator,
     TaskCommand,
@@ -26,9 +27,24 @@ from .models import (
     transition,
 )
 
+# TaskRecord.query_results is bounded because a sandbox call accepts at most ten inputs.
+MAX_TASK_QUERY_RESULTS = 10
+
 
 class RuntimeStateConflict(ValueError):
     pass
+
+
+class QueryResultLedger(Protocol):
+    async def append_query_result(self, task_id: str, ref: QueryResultRef) -> bool:
+        """Record one query's rows on the task; False once the bounded list is full."""
+        ...
+
+
+class ActiveTaskIndex(Protocol):
+    async def active_task_ids(self, attempt_prefix: str, *, limit: int = 200) -> list[str]:
+        """Non-terminal tasks whose active attempt belongs to one execution engine."""
+        ...
 
 
 class RuntimeStateRepository(Protocol):
@@ -270,6 +286,30 @@ class InMemoryRuntimeStateRepository:
             updated = task.model_copy(update={"final_message_id": message_id, "updated_at": datetime.now(UTC)})
             self._tasks[task_id] = updated
             return updated
+
+    async def append_query_result(self, task_id: str, ref: QueryResultRef) -> bool:
+        async with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                raise RuntimeStateConflict("task is unavailable")
+            if any(_same_rows(existing, ref) for existing in task.query_results):
+                return True
+            if len(task.query_results) >= MAX_TASK_QUERY_RESULTS:
+                return False
+            self._tasks[task_id] = task.model_copy(
+                update={"query_results": (*task.query_results, ref), "updated_at": datetime.now(UTC)}
+            )
+            return True
+
+    async def active_task_ids(self, attempt_prefix: str, *, limit: int = 200) -> list[str]:
+        async with self._lock:
+            return [
+                task.id
+                for task in self._tasks.values()
+                if task.status not in TERMINAL
+                and task.active_attempt_id is not None
+                and task.active_attempt_id.startswith(attempt_prefix)
+            ][:limit]
 
     async def transition_task(self, task_id: str, status: TaskStatus, expected_checkpoint: int) -> TaskRecord:
         async with self._lock:
@@ -741,6 +781,45 @@ class CosmosRuntimeStateRepository:
         )
         return await self._replace_task(updated, task.etag)
 
+    async def append_query_result(self, task_id: str, ref: QueryResultRef) -> bool:
+        # Checkpoints and commands write the same record, so a lost race is retried, not reported.
+        for _ in range(6):
+            task = await self.resolve_task(task_id)
+            if task is None:
+                raise RuntimeStateConflict("task is unavailable")
+            if any(_same_rows(existing, ref) for existing in task.query_results):
+                return True
+            if len(task.query_results) >= MAX_TASK_QUERY_RESULTS:
+                return False
+            updated = task.model_copy(
+                update={"query_results": (*task.query_results, ref), "updated_at": datetime.now(UTC)}
+            )
+            try:
+                await self._replace_task(updated, task.etag)
+            except RuntimeStateConflict:
+                continue
+            return True
+        raise RuntimeStateConflict("query result append conflict")
+
+    async def active_task_ids(self, attempt_prefix: str, *, limit: int = 200) -> list[str]:
+        query = (
+            "SELECT c.id FROM c WHERE c.recordType = 'task' AND IS_STRING(c.activeAttemptId) "
+            "AND STARTSWITH(c.activeAttemptId, @prefix) AND NOT ARRAY_CONTAINS(@terminal, c.status) "
+            "OFFSET 0 LIMIT @limit"
+        )
+        parameters: list[dict[str, object]] = [
+            {"name": "@prefix", "value": attempt_prefix},
+            {"name": "@terminal", "value": sorted(status.value for status in TERMINAL)},
+            {"name": "@limit", "value": limit},
+        ]
+        iterator = cast(Any, self._workspace.query_items(query=query, parameters=parameters))
+        task_ids: list[str] = []
+        async for item in iterator:
+            task_id = cast(dict[str, object], item).get("id")
+            if isinstance(task_id, str):
+                task_ids.append(task_id)
+        return task_ids
+
     async def begin_operation(
         self, task: TaskRecord, step_name: str, canonical_input: dict[str, Any]
     ) -> OperationRecord:
@@ -805,3 +884,7 @@ class CosmosRuntimeStateRepository:
         except CosmosHttpResponseError as error:
             raise RuntimeStateConflict("task update conflict") from error
         return TaskRecord.model_validate(document)
+
+
+def _same_rows(existing: QueryResultRef, candidate: QueryResultRef) -> bool:
+    return existing.artifact_id == candidate.artifact_id and existing.version == candidate.version

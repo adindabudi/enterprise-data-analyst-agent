@@ -1037,6 +1037,19 @@
           "title": "Completed",
           "type": "boolean"
         },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
         "text": {
           "maxLength": 500,
           "minLength": 1,

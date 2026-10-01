@@ -167,9 +167,12 @@ class FabricAccessTokenClient:
         )
 
     async def acquire(self, partition: TaskPartition) -> str:
+        return await self.acquire_for_owner(partition.tenant_id, partition.owner_object_id)
+
+    async def acquire_for_owner(self, tenant_id: UUID, owner_object_id: UUID) -> str:
         token = await self._service.acquire_access_token(
-            tenant_id=partition.tenant_id,
-            owner_object_id=partition.owner_object_id,
+            tenant_id=tenant_id,
+            owner_object_id=owner_object_id,
             provider=FabricProvider.ONTOLOGY,
         )
         return token.token

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -113,7 +113,43 @@ def create_progress_reporter(
     return report_progress
 
 
-async def build_analysis_runtime(settings: WorkerSettings) -> AnalysisRuntime:
+def create_todo_reporter(
+    repository: RuntimeStateRepository,
+    event_store: RedisEventStore,
+) -> Callable[[str, tuple[dict[str, object], ...]], Awaitable[None]]:
+    """Publishes the agent's plan to the task's live stream; like progress, nothing here may escape."""
+
+    async def report_todos(task_id: str, items: tuple[dict[str, object], ...]) -> None:
+        try:
+            task = await repository.resolve_task(task_id)
+            if task is None:
+                return
+            await event_store.append(
+                EventDraft(session_id=task.session_id, task_id=task.id, type="todo.updated", payload=list(items))
+            )
+        except (ConnectionError, RedisError):
+            return
+        except Exception:
+            logging.getLogger(__name__).exception("todo reporting failed for task %s", task_id)
+
+    return report_todos
+
+
+async def build_analysis_runtime(
+    settings: WorkerSettings,
+    *,
+    source_tools: Sequence[Any] = (),
+    source_context: Sequence[Any] = (),
+) -> AnalysisRuntime:
+    """Assemble the analyst runtime.
+
+    `source_tools` are data-source tools owned by the host application. When given,
+    they replace the worker's own Fabric gateway: the host already holds the
+    authorised source adapters, and one engine must not reach the same source
+    through two different paths. `source_context` are the host's context providers
+    for those tools, such as the source's pinned schema snapshot.
+    """
+    injected_source_tools = tuple(source_tools)
     startup = load_startup_model_state(settings)
     resources = AsyncExitStack()
     try:
@@ -228,6 +264,8 @@ async def build_analysis_runtime(settings: WorkerSettings) -> AnalysisRuntime:
         )
 
         fabric_settings = FabricSettings()
+        if injected_source_tools:
+            fabric_settings = fabric_settings.model_copy(update={"enabled": False})
         active_model = _fabric_model_identity(startup)
         semantic_contract = None
         ontology_contract: OntologyProviderRuntimeContract | None = None
@@ -379,21 +417,32 @@ async def build_analysis_runtime(settings: WorkerSettings) -> AnalysisRuntime:
             fabric_operation_model=fabric_operation_model,
             progress=report_progress,
         )
+        harness_fabric_readiness = fabric_readiness
+        if injected_source_tools:
+            tools = [*tools, *injected_source_tools]
+            injected_names = {getattr(tool, "name", None) for tool in injected_source_tools}
+            harness_fabric_readiness = FabricReadiness(
+                status=FabricReadinessStatus.READY
+                if "query_fabric" in injected_names
+                else FabricReadinessStatus.DISABLED
+            )
         harness = create_primary_harness(
             client=foundry_client,
             history_provider=ProjectionHistoryProvider(projection_repository),
             task_state_provider=TaskStateContextProvider(
                 task_state,
                 # query_fabric is registered only at READY, so this is also "has a source tool".
-                can_read_source=fabric_readiness.status is FabricReadinessStatus.READY,
+                can_read_source=bool(injected_source_tools) or fabric_readiness.status is FabricReadinessStatus.READY,
             ),
             tools=tools,
             tokenizer=startup.tokenizer,
             prompt=startup.prompt,
             skills_provider=skills_provider,
             document_middleware=document_middleware,
-            fabric_readiness=fabric_readiness,
+            fabric_readiness=harness_fabric_readiness,
             progress=report_progress,
+            todo_reporter=create_todo_reporter(runtime_repository, event_store),
+            extra_context_providers=tuple(source_context),
         )
         primary_agent = SessionHydratingAgent(
             harness=harness,

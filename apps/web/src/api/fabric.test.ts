@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   completeFabricAuthorization,
   getFabricAuthorizationStatus,
+  getFabricCapacityState,
   startFabricAuthorization,
 } from "./fabric";
 
@@ -160,4 +161,40 @@ describe("Fabric API", () => {
       }),
     );
   });
+
+  it.each(["active", "paused", "unknown"] as const)(
+    "reads a %s source capacity",
+    async (capacity) => {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ capacity }), { status: 200 }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(getFabricCapacityState()).resolves.toBe(capacity);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/fabric/source/status",
+        expect.objectContaining({ credentials: "same-origin" }),
+      );
+    },
+  );
+
+  it.each([
+    [{ capacity: "resuming" }, 200],
+    [{ capacity: "paused", detail: "extra" }, 200],
+    [{ capacity: "paused" }, 503],
+  ])(
+    "refuses a capacity answer it cannot trust: %j %i",
+    async (body, status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValue(new Response(JSON.stringify(body), { status })),
+      );
+
+      await expect(getFabricCapacityState()).rejects.toThrow();
+    },
+  );
 });

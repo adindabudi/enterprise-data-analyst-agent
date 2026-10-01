@@ -11,14 +11,17 @@ from eda_api.auth.msal_client import AuthenticationError
 from eda_api.config import Settings
 from eda_api.dependencies import settings
 
+from .capacity import CapacityState
 from .dependencies import (
     FabricAuthServiceDep,
     FabricAvailableDep,
+    FabricCapacityDep,
     FabricChatQueryDep,
     FabricProviderDep,
 )
 
 router = APIRouter(prefix="/api/fabric/auth", tags=["fabric-auth"])
+source_router = APIRouter(prefix="/api/fabric/source", tags=["fabric-source"])
 
 
 class FabricAuthStartRequest(BaseModel):
@@ -47,6 +50,12 @@ class FabricAuthStatus(BaseModel):
     state: Literal["unlinked", "linked", "reauth_required"]
     chat_query: bool = Field(serialization_alias="chatQuery")
     source: FabricSourceMetadata | None = None
+
+
+class FabricSourceStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    capacity: CapacityState
 
 
 @router.post("/start", response_model=FabricAuthStartResponse)
@@ -140,3 +149,16 @@ async def unlink(
     service: FabricAuthServiceDep,
 ) -> None:
     await service.unlink(principal=principal)
+
+
+@source_router.get("/status", response_model=FabricSourceStatus)
+async def source_status(
+    principal: CurrentPrincipalDep,
+    service: FabricAuthServiceDep,
+    capacity: FabricCapacityDep,
+) -> FabricSourceStatus:
+    """Whether the linked source can run queries right now, which the link alone cannot tell."""
+    # Only a linked owner's own grant may probe, and an unlinked caller learns nothing about the source.
+    if capacity is None or await service.status(principal=principal) != "linked":
+        return FabricSourceStatus(capacity=CapacityState.UNKNOWN)
+    return FabricSourceStatus(capacity=await capacity.for_owner(principal.tenant_id, principal.owner_object_id))

@@ -58,8 +58,10 @@ async def test_runtime_repository_uses_opaque_locator_and_owner_hpk() -> None:
     )
 
     try:
-        await repository.create_task(task, "request-12345678")
-        assert await repository.resolve_task(task.id) == task
+        created = await repository.create_task(task, "request-12345678")
+        # Compare against the record the store actually wrote: Cosmos assigns the
+        # etag, so the pre-insert object can never be equal to what is read back.
+        assert await repository.resolve_task(task.id) == created
         first = await repository.append_command(
             task.partition(), task.id, CommandKind.STEER, "regional check", "command-1"
         )

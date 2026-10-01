@@ -107,6 +107,7 @@ def test_api_receives_hosted_agent_dispatch_settings() -> None:
         "EDA_REDIS_URL",
         "EDA_FOUNDRY_PROJECT_ENDPOINT",
         "EDA_FOUNDRY_MODEL_DEPLOYMENT",
+        "EDA_ANALYSIS_RUNTIME_ENABLED",
         "EDA_MODEL_PROFILE",
         "EDA_FOUNDRY_HOSTING",
         "EDA_DEPLOYMENT_ID",
@@ -124,6 +125,18 @@ def test_provision_uses_pinned_application_images_from_azd_environment() -> None
 
     assert parameters["apiImage"]["value"].startswith("${EDA_API_IMAGE=example.azurecr.io/eda-api@sha256:")
     assert parameters["workerImage"]["value"].startswith("${EDA_WORKER_IMAGE=example.azurecr.io/eda-worker@sha256:")
+
+
+def test_azure_yaml_uses_api_service_only_and_passes_worker_image_build_arg() -> None:
+    manifest = (ROOT / "azure.yaml").read_text(encoding="utf-8")
+
+    assert "host: azure.ai.agent" not in manifest
+    assert "host: azure.ai.project" not in manifest
+    assert "azure.ai.agents" not in manifest
+    assert "long-job:" not in manifest
+    assert "ai-project:" not in manifest
+    assert "EDA_WORKER_IMAGE=${EDA_WORKER_IMAGE}" in manifest
+    assert "scripts/bind-hosted-agent-rbac.py" not in manifest
 
 
 def test_bicep_exports_the_document_contract_deployment_identity() -> None:

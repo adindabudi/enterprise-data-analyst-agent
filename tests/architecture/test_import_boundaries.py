@@ -29,9 +29,25 @@ def test_provenance_does_not_import_application_packages() -> None:
     assert not any(name.startswith(("eda_api", "eda_worker")) for name in imports)
 
 
-def test_api_does_not_import_worker_or_sandbox() -> None:
-    imports = imports_under(ROOT / "apps/api/src")
-    assert not any(name.startswith(("eda_worker", "eda_sandbox")) for name in imports)
+def test_api_reaches_the_analyst_runtime_only_through_its_analysis_boundary() -> None:
+    # The analyst runtime runs inside the API; only `eda_api.analysis` may import it, and never the sandbox.
+    boundary = ROOT / "apps/api/src/eda_api/analysis"
+    for source_path in (ROOT / "apps/api/src").rglob("*.py"):
+        imports = imports_under_file(source_path)
+        assert not any(name.startswith("eda_sandbox") for name in imports), source_path
+        if boundary not in source_path.parents:
+            assert not any(name.startswith("eda_worker") for name in imports), source_path
+
+
+def imports_under_file(source_path: Path) -> set[str]:
+    imported: set[str] = set()
+    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+    return imported
 
 
 def test_shipped_runtimes_do_not_include_retired_durable_task_topology() -> None:

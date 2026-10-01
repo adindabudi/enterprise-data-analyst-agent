@@ -101,4 +101,80 @@ describe("FabricConnectionAction", () => {
 
     expect(screen.getByText(label)).toBeVisible();
   });
+
+  it.each(["configured", "ready"] as const)(
+    "reports a paused capacity instead of a %s connection",
+    (availability) => {
+      render(
+        <FabricConnectionAction
+          availability={availability}
+          authorization={{
+            provider: "ontology",
+            state: "linked",
+            chatQuery: true,
+          }}
+          capacity="paused"
+        />,
+      );
+
+      expect(screen.getByText("Fabric capacity paused")).toBeVisible();
+      expect(screen.queryByText(/Fabric connected/)).toBeNull();
+      expect(screen.queryByRole("button")).toBeNull();
+    },
+  );
+
+  it("does not claim a connection before the capacity has been read", () => {
+    render(
+      <FabricConnectionAction
+        availability="configured"
+        authorization={{
+          provider: "ontology",
+          state: "linked",
+          chatQuery: true,
+        }}
+        capacity="checking"
+      />,
+    );
+
+    expect(screen.getByText("Checking Fabric…")).toBeVisible();
+    expect(screen.queryByText(/Fabric connected/)).toBeNull();
+  });
+
+  it.each(["active", "unknown"] as const)(
+    "keeps the connection label when the capacity is %s",
+    (capacity) => {
+      render(
+        <FabricConnectionAction
+          availability="configured"
+          authorization={{
+            provider: "ontology",
+            state: "linked",
+            chatQuery: true,
+          }}
+          capacity={capacity}
+        />,
+      );
+
+      expect(screen.getByText("Fabric connected for chat")).toBeVisible();
+    },
+  );
+
+  it("leaves sign-in states alone whatever the capacity", () => {
+    render(
+      <FabricConnectionAction
+        availability="configured"
+        authorization={{
+          provider: "ontology",
+          state: "reauth_required",
+          chatQuery: true,
+        }}
+        capacity="paused"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Reconnect Fabric" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Fabric capacity paused")).toBeNull();
+  });
 });

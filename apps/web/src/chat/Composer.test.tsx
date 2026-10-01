@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Composer, type ComposerRequest } from "./Composer";
+import { blockedUploadMessage, Composer } from "./Composer";
 
 afterEach(cleanup);
 
@@ -26,16 +26,11 @@ describe("composer", () => {
     expect(screen.getByRole("button", { name: "Add context" })).toBeEnabled();
   });
 
-  it("sends in automatic mode by default", async () => {
+  it("sends through the durable task path by default", async () => {
     const user = userEvent.setup();
-    const calls: Array<[string, boolean]> = [];
+    const calls: string[] = [];
     render(
-      <Composer
-        disabled={false}
-        onSend={(message, request) =>
-          calls.push([message, request.deepAnalysis])
-        }
-      />,
+      <Composer disabled={false} onSend={(message) => calls.push(message)} />,
     );
 
     await user.type(
@@ -44,40 +39,27 @@ describe("composer", () => {
     );
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(calls).toEqual([["Build a workbook", false]]);
+    expect(calls).toEqual(["Build a workbook"]);
   });
 
-  it("offers deep analysis as a contextual one-turn override", async () => {
+  it("only offers file attachment as additional context", async () => {
     const user = userEvent.setup();
-    const calls: Array<[string, boolean]> = [];
-    render(
-      <Composer
-        disabled={false}
-        onSend={(message, request) =>
-          calls.push([message, request.deepAnalysis])
-        }
-      />,
-    );
+    render(<Composer disabled={false} onAttach={vi.fn()} />);
 
     await user.click(screen.getByRole("button", { name: "Add context" }));
-    await user.click(screen.getByRole("menuitem", { name: "Deep analysis" }));
-    await user.type(
-      screen.getByRole("textbox", { name: "Analysis request" }),
-      "Build a workbook",
-    );
-    await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(screen.queryByText("Deep analysis enabled")).not.toBeInTheDocument();
-    expect(calls).toEqual([["Build a workbook", true]]);
+    expect(screen.getByRole("menuitem", { name: "Attach file" })).toBeVisible();
+    expect(screen.queryByText("Deep analysis")).not.toBeInTheDocument();
   });
 
-  it("selects deep analysis only after the controlled upload is clean", async () => {
+  it("sends only after the controlled upload is clean", async () => {
     const user = userEvent.setup();
-    const calls: Array<[string, boolean]> = [];
-    const onSend = (message: string, request: ComposerRequest): void => {
-      calls.push([message, request.deepAnalysis]);
+    const calls: string[] = [];
+    const onSend = (message: string): void => {
+      calls.push(message);
     };
     const onAttach = vi.fn();
+    const onBlockedUploadSend = vi.fn();
     const { rerender } = render(
       <Composer disabled={false} onSend={onSend} onAttach={onAttach} />,
     );
@@ -102,6 +84,7 @@ describe("composer", () => {
         onSend={onSend}
         onAttach={onAttach}
         attachment={{ ...attachment, state: "scanning" }}
+        onBlockedUploadSend={onBlockedUploadSend}
       />,
     );
 
@@ -111,7 +94,12 @@ describe("composer", () => {
     );
     await user.keyboard("{Enter}");
     expect(calls).toEqual([]);
-    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(onBlockedUploadSend).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", {
+        name: "Wait for the file scan to finish",
+      }),
+    ).toBeDisabled();
     rerender(
       <Composer
         disabled={false}
@@ -122,7 +110,37 @@ describe("composer", () => {
     );
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(calls).toEqual([["Summarize this file", true]]);
+    expect(calls).toEqual(["Summarize this file"]);
+  });
+
+  it("tells the user to remove a file that failed its scan instead of waiting", () => {
+    const attachment = {
+      displayName: "revenue.xlsx",
+      uploadId: "upl_12345678",
+    };
+
+    for (const state of ["pending", "uploading", "scanning"] as const) {
+      expect(blockedUploadMessage({ ...attachment, state })).toBe(
+        "Wait for the file scan to finish",
+      );
+    }
+    for (const state of ["rejected", "scan_failed", "error"] as const) {
+      expect(blockedUploadMessage({ ...attachment, state })).toBe(
+        "Remove the file to send without it",
+      );
+    }
+    render(
+      <Composer
+        disabled={false}
+        attachment={{ ...attachment, state: "rejected" }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Remove the file to send without it",
+      }),
+    ).toBeDisabled();
   });
 
   it("keeps drafting and stop available while one agent turn is running", async () => {
@@ -133,7 +151,9 @@ describe("composer", () => {
     expect(input).toBeEnabled();
     await user.type(input, "Draft the next question");
     expect(input).toHaveValue("Draft the next question");
-    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Send to the running analysis" }),
+    ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Stop current task" }),
     ).toBeEnabled();
@@ -154,7 +174,9 @@ describe("composer", () => {
       screen.getByRole("textbox", { name: "Analysis request" }),
       "Also include occupancy",
     );
-    const send = screen.getByRole("button", { name: "Send message" });
+    const send = screen.getByRole("button", {
+      name: "Send to the running analysis",
+    });
     // The turn already going is the one that should hear this, so the button stays live.
     expect(send).toBeEnabled();
     await user.click(send);

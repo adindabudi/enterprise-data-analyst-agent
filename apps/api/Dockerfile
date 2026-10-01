@@ -1,4 +1,9 @@
 # syntax=docker/dockerfile:1.8
+# The pinned worker image: its skill bundles and tokenizer calibration are copied byte for byte, so the
+# Document Pack readiness evidence recorded against that image stays true for the runtime in this one.
+ARG EDA_WORKER_IMAGE
+FROM ${EDA_WORKER_IMAGE} AS worker-assets
+
 FROM node:24.12.0-bookworm-slim@sha256:7326fb2dbdce998edd72140946851be64ef4a643e8715e138ca467e8e9d92c99 AS web-build
 WORKDIR /src
 COPY package.json package-lock.json ./
@@ -20,12 +25,14 @@ COPY packages/contracts/python packages/contracts/python
 COPY packages/fabric-auth packages/fabric-auth
 COPY packages/provenance packages/provenance
 COPY packages/runtime-state packages/runtime-state
+COPY services/worker services/worker
 RUN uv export --frozen --package eda-api --no-dev --no-emit-workspace --format requirements-txt --output-file requirements.txt \
     && python -m pip wheel --require-hashes --wheel-dir /wheels -r requirements.txt \
     && uv build --wheel --out-dir /wheels packages/contracts/python \
     && uv build --wheel --out-dir /wheels packages/fabric-auth \
     && uv build --wheel --out-dir /wheels packages/provenance \
     && uv build --wheel --out-dir /wheels packages/runtime-state \
+    && uv build --wheel --out-dir /wheels services/worker \
     && uv build --wheel --out-dir /wheels apps/api
 
 FROM python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
@@ -39,9 +46,13 @@ RUN python -m pip install --no-index --no-cache-dir /wheels/*.whl \
     && rm -rf /wheels /root/.cache
 COPY --from=web-build /src/apps/web/dist /app/static
 COPY .artifacts/model-contract.json /app/config/model-contract.json
+COPY --from=worker-assets /app/config/tokenizer-calibration.json /app/config/tokenizer-calibration.json
+COPY --from=worker-assets --chown=10001:10001 /opt/document-skills /opt/document-skills
+COPY --from=worker-assets /opt/web-skills /opt/web-skills
 COPY services/worker/src/eda_worker/agent/prompts/gpt-5.6-terra-v1.md /app/config/gpt-5.6-terra-v1.md
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    HOME=/app \
     EDA_FRONTEND_DIST=/app/static
 USER 10001:10001
 EXPOSE 8000

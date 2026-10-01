@@ -84,6 +84,7 @@ export type Type3 =
 export type Eventid4 = string;
 export type Occurredat4 = string;
 export type Completed = boolean;
+export type Description = string | null;
 export type Text = string;
 export type Todoid = string;
 export type Payload = TodoItem[];
@@ -258,6 +259,7 @@ export interface TodoUpdatedEvent {
 }
 export interface TodoItem {
   completed: Completed;
+  description?: Description;
   text: Text;
   todoId: Todoid;
 }

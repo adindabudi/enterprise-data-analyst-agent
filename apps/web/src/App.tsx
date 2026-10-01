@@ -15,7 +15,11 @@ import {
 import { DEFAULT_BRANDING } from "./app/branding";
 import { compileTheme } from "./app/theme";
 import { FabricConnectionAction } from "./features/fabric/FabricConnectionAction";
-import type { FabricAvailability } from "./features/fabric/source-context";
+import {
+  queryableSource,
+  type FabricAvailability,
+} from "./features/fabric/source-context";
+import { useFabricCapacity } from "./features/fabric/useFabricCapacity";
 import { DesktopWorkspace } from "./layout/DesktopWorkspace";
 
 type BootstrapState = "booting" | "signed_out" | "authenticated" | "failed";
@@ -29,6 +33,15 @@ export function App() {
     useState<FabricAuthorizationStatus>();
   const [isMobile, setIsMobile] = useState(
     () => window.matchMedia("(max-width: 1023px)").matches,
+  );
+  // Only a source that can answer queries has a capacity worth reporting.
+  const fabricCapacity = useFabricCapacity(
+    state === "authenticated" &&
+      fabricAuthorization !== undefined &&
+      queryableSource({
+        availability: fabricAvailability,
+        authorization: fabricAuthorization,
+      }),
   );
   const retry = (): void => {
     setState("booting");
@@ -143,6 +156,9 @@ export function App() {
                 {...(fabricAuthorization === undefined
                   ? {}
                   : { authorization: fabricAuthorization })}
+                {...(fabricCapacity.capacity === undefined
+                  ? {}
+                  : { capacity: fabricCapacity.capacity })}
               />
             )}
             <div className="workspace-privacy">
@@ -160,6 +176,10 @@ export function App() {
             {...(fabricAuthorization === undefined
               ? {}
               : { fabricAuthorization })}
+            {...(fabricCapacity.capacity === undefined
+              ? {}
+              : { fabricCapacity: fabricCapacity.capacity })}
+            onRunSettled={fabricCapacity.refresh}
           />
         ) : (
           <main className="bootstrap-state" id="workspace-main" tabIndex={-1}>

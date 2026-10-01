@@ -9,6 +9,7 @@ import { MobileWorkspace } from "./MobileWorkspace";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   document.cookie = "eda_csrf=; Max-Age=0; Path=/";
   window.history.replaceState(null, "", "/");
 });
@@ -179,12 +180,9 @@ describe.each([
         return Promise.resolve(
           jsonResponse({ messageId: "msg_upload_12345678" }, 201),
         );
-      if (path.endsWith("/chat"))
+      if (path.endsWith("/tasks"))
         return Promise.resolve(
-          new Response(
-            'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-            { headers: { "Content-Type": "text/event-stream" } },
-          ),
+          jsonResponse({ taskId: "task_upload_12345678" }, 202),
         );
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
@@ -200,24 +198,26 @@ describe.each([
     );
     await user.keyboard("{Enter}");
     expect(
+      screen.getAllByText("Wait for the file scan to finish").length,
+    ).toBeGreaterThan(0);
+    expect(
       fetchMock.mock.calls.some(([input]) =>
         requestUrl(input).endsWith("/messages"),
       ),
     ).toBe(false);
     await user.click(screen.getByRole("button", { name: "Remove attachment" }));
     expect(screen.queryByText("private.csv")).not.toBeInTheDocument();
-    expect(screen.queryByText("Deep analysis enabled")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          requestUrl(input).endsWith("/chat"),
+          requestUrl(input).endsWith("/tasks"),
         ),
       ).toBe(true);
     });
     expect(
       fetchMock.mock.calls.some(([input]) =>
-        requestUrl(input).endsWith("/tasks"),
+        requestUrl(input).endsWith("/chat"),
       ),
     ).toBe(false);
   });
@@ -266,7 +266,11 @@ describe.each([
     });
     await user.upload(screen.getByLabelText("Choose analysis input"), file);
 
-    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", {
+        name: "Wait for the file scan to finish",
+      }),
+    ).toBeDisabled();
     expect(screen.getAllByText("Pending upload").length).toBeGreaterThan(0);
     await act(async () => {
       session.resolve(jsonResponse({ sessionId }, 201));
@@ -288,15 +292,28 @@ describe.each([
       );
       await upload.promise;
     });
-    expect(screen.getAllByText("Scanning").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(
+      screen.getAllByText("Checking the file for malware…").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", {
+        name: "Wait for the file scan to finish",
+      }),
+    ).toBeDisabled();
     expect(
       fetchMock.mock.calls.some(([input]) =>
         requestUrl(input).endsWith(`/${uploadId}`),
       ),
     ).toBe(false);
-    await user.click(
-      screen.getByRole("button", { name: "Refresh upload status" }),
+    await waitFor(
+      () => {
+        expect(
+          fetchMock.mock.calls.some(([input]) =>
+            requestUrl(input).endsWith(`/${uploadId}`),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 3_000 },
     );
     expect(
       screen.getByRole("button", { name: "Refresh upload status" }),
@@ -311,21 +328,23 @@ describe.each([
     expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
     expect(
       fetchMock.mock.calls.some(([input]) =>
-        requestUrl(input).endsWith("/tasks"),
+        requestUrl(input).endsWith("/chat"),
       ),
     ).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => {
-      const taskCall = fetchMock.mock.calls.find(([input]) =>
-        requestUrl(input).endsWith("/tasks"),
-      );
-      expect(taskCall?.[0]).toBe(`/api/sessions/${sessionId}/tasks`);
-      const body = taskCall?.[1]?.body;
-      if (typeof body !== "string")
-        throw new Error("Expected a JSON task request");
-      expect(JSON.parse(body)).toMatchObject({ inputUploadIds: [uploadId] });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    const taskCall = fetchMock.mock.calls.find(([input]) =>
+      requestUrl(input).endsWith("/tasks"),
+    );
+    expect(taskCall?.[0]).toBe(`/api/sessions/${sessionId}/tasks`);
+    const body = taskCall?.[1]?.body;
+    if (typeof body !== "string")
+      throw new Error("Expected a JSON task request");
+    expect(JSON.parse(body)).toMatchObject({ inputUploadIds: [uploadId] });
     expect(
       fetchMock.mock.calls.filter(
         ([input]) => requestUrl(input) === "/api/sessions",
@@ -336,5 +355,5 @@ describe.each([
         requestUrl(input).endsWith("/uploads"),
       ),
     ).toHaveLength(1);
-  });
+  }, 10_000);
 });

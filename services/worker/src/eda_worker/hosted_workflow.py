@@ -3,9 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from enum import StrEnum
-from typing import Any, Never, Protocol, cast
+from typing import Any, Never, cast
 
 from agent_framework import Executor, Message, Workflow, WorkflowBuilder, WorkflowContext, handler
 from eda_contracts.tasks import TaskStatus
@@ -13,18 +12,28 @@ from eda_runtime_state.models import TERMINAL, TaskRecord
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from .contracts import ControlSnapshot
+from .lifecycle import (
+    MAX_OUTPUT_REPAIR_ROUNDS,
+    MAX_STEERING_ROUNDS,
+    AnalysisServices,
+    OutputRepairRequired,
+    analysis_failure_code,
+)
 
-MAX_STEERING_ROUNDS = 3
-MAX_OUTPUT_REPAIR_ROUNDS = 2
 MAX_WORKFLOW_ITERATIONS = 12
 logger = logging.getLogger(__name__)
-_SAFE_DECLARED_FAILURE = re.compile(r"^analysis_failed_[a-z0-9_]{1,112}$")
-_SAFE_PROVIDER_CODE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
-
-class OutputRepairRequired(ValueError):
-    pass
+__all__ = [
+    "MAX_OUTPUT_REPAIR_ROUNDS",
+    "MAX_STEERING_ROUNDS",
+    "MAX_WORKFLOW_ITERATIONS",
+    "AnalysisServices",
+    "HostedTaskResult",
+    "OutputRepairRequired",
+    "WorkflowAction",
+    "WorkflowCommand",
+    "build_hosted_workflow",
+]
 
 
 class HostedWorkflowModel(BaseModel):
@@ -58,29 +67,6 @@ class HostedTaskResult(HostedWorkflowModel):
     status: TaskStatus
     final_message_id: str | None = None
     failure_code: str | None = None
-
-
-class AnalysisServices(Protocol):
-    async def task(self, task_id: str) -> TaskRecord | None: ...
-
-    async def controls(self, task_id: str) -> ControlSnapshot: ...
-
-    async def checkpoint(self, task_id: str, status: TaskStatus, expected_checkpoint: int) -> TaskRecord: ...
-
-    async def run_analysis(
-        self,
-        task_id: str,
-        pending_command_ids: tuple[str, ...],
-        repair_feedback: str | None = None,
-    ) -> str: ...
-
-    async def acknowledge(self, task_id: str, through_sequence: int) -> None: ...
-
-    async def complete(self, task_id: str, text: str) -> str: ...
-
-    async def cancel(self, task_id: str) -> None: ...
-
-    async def fail(self, task_id: str, failure_code: str) -> None: ...
 
 
 class IntakeExecutor(Executor):
@@ -286,21 +272,7 @@ def _terminal(
 
 
 def _analysis_failure_code(error: Exception) -> str:
-    declared = getattr(error, "failure_code", None)
-    if isinstance(declared, str) and _SAFE_DECLARED_FAILURE.fullmatch(declared):
-        return declared
-    tokens = ["analysis_failed", _failure_token(type(error).__name__)]
-    status = getattr(error, "status_code", None)
-    if isinstance(status, int) and 100 <= status <= 599:
-        tokens.append(f"http_{status}")
-    provider_code = getattr(error, "code", None)
-    if isinstance(provider_code, str) and _SAFE_PROVIDER_CODE.fullmatch(provider_code):
-        tokens.append(_failure_token(provider_code))
-    return "_".join(tokens)[:128]
-
-
-def _failure_token(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    return analysis_failure_code(error)
 
 
 async def _cancel(services: AnalysisServices, task: TaskRecord) -> WorkflowCommand:

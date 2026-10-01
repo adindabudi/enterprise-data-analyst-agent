@@ -11,7 +11,6 @@ import {
   listTaskArtifacts,
   readTaskProvenance,
   readAnalysisHistory,
-  streamInteractiveChat,
   steerAnalysis,
   uploadAnalysisInput,
   readUploadStatus,
@@ -275,210 +274,21 @@ describe("analysis API", () => {
     ).toBe("cancel-request-12345678");
   });
 
-  it("delivers the data steps a turn reports so the answer can be traced", async () => {
-    document.cookie = "eda_csrf=csrf-value; Path=/";
-    const step = {
-      stepId: "step-1",
-      kind: "gql",
-      label: "Queried lamna-healthcare graph",
-      state: "completed",
-      query: "MATCH (r:rooms) RETURN count(*) AS total",
-      source: "lamna-healthcare",
-      rowCount: "1",
-      querySha256: "a".repeat(64),
-    };
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse(
-          { sessionId: "ses_chat_12345678", title: "Private chat" },
-          201,
-        ),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ messageId: "msg_chat_12345678" }, 201),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          [
-            `event: data_step\ndata: ${JSON.stringify(step)}\n\n`,
-            'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-          ].join(""),
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-    const updates: Array<{ event: string; data: Record<string, string> }> = [];
-
-    await streamInteractiveChat(
-      "Private chat",
-      "How many rooms?",
-      [],
-      "request-chat-12345679",
-      new AbortController().signal,
-      (update) => updates.push(update),
-    );
-
-    expect(updates[0]).toEqual({ event: "data_step", data: step });
-  });
-
-  it("streams interactive chat without creating a durable task", async () => {
+  it("sends only the ten most recent conversation messages for coreference", async () => {
     document.cookie = "eda_csrf=csrf-value; Path=/";
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         jsonResponse(
-          { sessionId: "ses_chat_12345678", title: "Private chat" },
+          { sessionId: "ses_task_12345678", title: "Private chat" },
           201,
         ),
       )
       .mockResolvedValueOnce(
-        jsonResponse({ messageId: "msg_chat_12345678" }, 201),
+        jsonResponse({ messageId: "msg_task_12345678" }, 201),
       )
       .mockResolvedValueOnce(
-        new Response(
-          [
-            'event: status\ndata: {"message":"Agent is thinking"}\n\n',
-            'event: delta\ndata: {"text":"Hello"}\n\n',
-            'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-          ].join(""),
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-    const updates: Array<{ event: string; data: Record<string, string> }> = [];
-
-    const identity = await streamInteractiveChat(
-      "Private chat",
-      "Say hello",
-      [{ role: "assistant", text: "Prior answer" }],
-      "request-chat-12345678",
-      new AbortController().signal,
-      (update) => updates.push(update),
-    );
-
-    expect(identity).toEqual({
-      sessionId: "ses_chat_12345678",
-      messageId: "msg_chat_12345678",
-    });
-    expect(updates.map((update) => update.event)).toEqual([
-      "status",
-      "delta",
-      "completed",
-    ]);
-    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      "/api/sessions",
-      "/api/sessions/ses_chat_12345678/messages",
-      "/api/sessions/ses_chat_12345678/chat",
-    ]);
-    expect(
-      fetchMock.mock.calls.some(([path]) =>
-        requestUrl(path).includes("/tasks"),
-      ),
-    ).toBe(false);
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      "/api/sessions/ses_chat_12345678/chat",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          messageId: "msg_chat_12345678",
-          history: [{ role: "assistant", text: "Prior answer" }],
-        }),
-      }),
-    );
-  });
-
-  it("appends follow-up turns to the active session instead of creating another thread", async () => {
-    document.cookie = "eda_csrf=csrf-value; Path=/";
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse({ messageId: "msg_followup_12345678" }, 201),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          'event: delta\ndata: {"text":"Follow-up response."}\n\n' +
-            'event: completed\ndata: {"messageId":"msg_reply_87654321"}\n\n',
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const identity = await streamInteractiveChat(
-      "Private chat",
-      "Continue that answer",
-      [{ role: "assistant", text: "Prior answer" }],
-      "request-followup-12345678",
-      new AbortController().signal,
-      vi.fn(),
-      "ses_existing_12345678",
-    );
-
-    expect(identity.sessionId).toBe("ses_existing_12345678");
-    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      "/api/sessions/ses_existing_12345678/messages",
-      "/api/sessions/ses_existing_12345678/chat",
-    ]);
-  });
-
-  it("rejects an interactive stream that closes without a terminal event", async () => {
-    document.cookie = "eda_csrf=csrf-value; Path=/";
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse(
-          { sessionId: "ses_chat_12345678", title: "Private chat" },
-          201,
-        ),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ messageId: "msg_chat_12345678" }, 201),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          'event: status\ndata: {"message":"Agent is thinking"}\n\n',
-          {
-            status: 200,
-            headers: { "Content-Type": "text/event-stream" },
-          },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(
-      streamInteractiveChat(
-        "Private chat",
-        "Say hello",
-        [],
-        "request-chat-12345678",
-        new AbortController().signal,
-        vi.fn(),
-      ),
-    ).rejects.toThrow("ended without a terminal event");
-  });
-
-  it("sends only the five most recent conversation turns for coreference", async () => {
-    document.cookie = "eda_csrf=csrf-value; Path=/";
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse(
-          { sessionId: "ses_chat_12345678", title: "Private chat" },
-          201,
-        ),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ messageId: "msg_chat_12345678" }, 201),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-          {
-            status: 200,
-            headers: { "Content-Type": "text/event-stream" },
-          },
-        ),
+        jsonResponse({ taskId: "task_task_12345678" }, 202),
       );
     vi.stubGlobal("fetch", fetchMock);
     const history = Array.from({ length: 14 }, (_, index) => ({
@@ -486,16 +296,14 @@ describe("analysis API", () => {
       text: `message-${String(index)}`,
     }));
 
-    await streamInteractiveChat(
+    await createAnalysis(
       "Private chat",
       "What about those?",
+      "request-task-12345678",
       history,
-      "request-chat-12345678",
-      new AbortController().signal,
-      vi.fn(),
     );
 
-    const body = chatRequestBody(fetchMock.mock.calls[2]?.[1]?.body);
+    const body = taskRequestBody(fetchMock.mock.calls[2]?.[1]?.body);
     expect(body.history).toHaveLength(10);
     expect(body.history.at(0)?.text).toBe("message-4");
     expect(body.history.at(9)?.text).toBe("message-13");
@@ -507,21 +315,15 @@ describe("analysis API", () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         jsonResponse(
-          { sessionId: "ses_chat_12345678", title: "Private chat" },
+          { sessionId: "ses_task_12345678", title: "Private chat" },
           201,
         ),
       )
       .mockResolvedValueOnce(
-        jsonResponse({ messageId: "msg_chat_12345678" }, 201),
+        jsonResponse({ messageId: "msg_task_12345678" }, 201),
       )
       .mockResolvedValueOnce(
-        new Response(
-          'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-          {
-            status: 200,
-            headers: { "Content-Type": "text/event-stream" },
-          },
-        ),
+        jsonResponse({ taskId: "task_task_12345678" }, 202),
       );
     vi.stubGlobal("fetch", fetchMock);
     const history = Array.from({ length: 5 }, (_, index) => ({
@@ -529,16 +331,14 @@ describe("analysis API", () => {
       text: String(index).repeat(5_000),
     }));
 
-    await streamInteractiveChat(
+    await createAnalysis(
       "Private chat",
       "What about those?",
+      "request-task-12345678",
       history,
-      "request-chat-12345678",
-      new AbortController().signal,
-      vi.fn(),
     );
 
-    const body = chatRequestBody(fetchMock.mock.calls[2]?.[1]?.body);
+    const body = taskRequestBody(fetchMock.mock.calls[2]?.[1]?.body);
     expect(body.history).toHaveLength(3);
     expect(body.history.map((message) => message.text[0])).toEqual([
       "2",
@@ -701,10 +501,10 @@ function jsonResponse(value: object, status: number): Response {
   });
 }
 
-function chatRequestBody(body: BodyInit | null | undefined): {
+function taskRequestBody(body: BodyInit | null | undefined): {
   history: ChatHistoryMessage[];
 } {
-  if (typeof body !== "string") throw new Error("Chat request body is absent");
+  if (typeof body !== "string") throw new Error("Task request body is absent");
   const parsed: unknown = JSON.parse(body);
   if (
     typeof parsed !== "object" ||
@@ -713,7 +513,7 @@ function chatRequestBody(body: BodyInit | null | undefined): {
     !Array.isArray(parsed.history) ||
     !parsed.history.every(isChatHistoryMessage)
   ) {
-    throw new Error("Chat request body is malformed");
+    throw new Error("Task request body is malformed");
   }
   return { history: parsed.history };
 }
@@ -727,14 +527,6 @@ function isChatHistoryMessage(value: unknown): value is ChatHistoryMessage {
     "text" in value &&
     typeof value.text === "string"
   );
-}
-
-function requestUrl(value: RequestInfo | URL): string {
-  return typeof value === "string"
-    ? value
-    : value instanceof URL
-      ? value.href
-      : value.url;
 }
 
 describe("provenance", () => {

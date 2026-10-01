@@ -244,7 +244,7 @@ def application_redis_access_policies(
 
 
 def verify(outputs: Mapping[str, str], expected: ExpectedAssignments, runner: CommandRunner = run_az_json) -> None:
-    resource_ids = [outputs["storageAccountId"], outputs["cosmosAccountId"]]
+    resource_ids = [outputs["storageAccountId"], outputs["cosmosAccountId"], outputs["sandboxGroupId"]]
     graph_query = "Resources | where id in~ ({}) | project id".format(
         ", ".join(f"'{resource_id}'" for resource_id in resource_ids)
     )
@@ -259,10 +259,10 @@ def verify(outputs: Mapping[str, str], expected: ExpectedAssignments, runner: Co
         ]
     )
 
-    actual_arm = application_assignments(
-        normalized_assignments(runner(["role", "assignment", "list", "--scope", outputs["storageAccountId"]])),
-        expected.arm,
-    )
+    arm_records: list[dict[str, Any]] = []
+    for scope in sorted({assignment.scope for assignment in expected.arm}):
+        arm_records.extend(runner(["role", "assignment", "list", "--scope", scope]))
+    actual_arm = application_assignments(normalized_assignments(arm_records), expected.arm)
     assert_exact("ARM", expected.arm, actual_arm)
 
     resource_group = resource_group_name(outputs["cosmosAccountId"])

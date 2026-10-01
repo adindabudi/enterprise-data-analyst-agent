@@ -190,6 +190,10 @@ resource api 'Microsoft.App/containerApps@2026-01-01' = {
               value: 'true'
             }
             {
+              name: 'EDA_ANALYSIS_RUNTIME_ENABLED'
+              value: 'true'
+            }
+            {
               name: 'EDA_MODEL_PROFILE'
               value: modelProfile
             }

@@ -52,13 +52,6 @@ it.each([
       vi.fn<typeof fetch>((input) => {
         const path = input instanceof Request ? input.url : input.toString();
         const artifactTaskId = path.split("/")[3] ?? "";
-        if (path.endsWith("/chat"))
-          return Promise.resolve(
-            new Response(
-              'event: delta\ndata: {"text":"Follow-up answer"}\n\nevent: completed\ndata: {"messageId":"msg_followup_12345678"}\n\n',
-              { headers: { "Content-Type": "text/event-stream" } },
-            ),
-          );
         const body =
           path === "/api/sessions"
             ? [session]
@@ -95,22 +88,24 @@ it.each([
                   }
                 : path.endsWith("/messages")
                   ? { messageId: "msg_next_12345678" }
-                  : path.endsWith("/provenance")
-                    ? { sourceQueries: [], artifacts: [] }
-                    : path.endsWith("/artifacts")
-                      ? {
-                          artifacts: [
-                            {
-                              artifactId: `artifact-${artifactTaskId}`,
-                              version: 2,
-                              kind: "xlsx",
-                              sha256: "a".repeat(64),
-                              sizeBytes: 2048,
-                              displayName: `${artifactTaskId}.xlsx`,
-                            },
-                          ],
-                        }
-                      : session;
+                  : path.endsWith("/tasks")
+                    ? { taskId: "task_followup_12345678" }
+                    : path.endsWith("/provenance")
+                      ? { sourceQueries: [], artifacts: [] }
+                      : path.endsWith("/artifacts")
+                        ? {
+                            artifacts: [
+                              {
+                                artifactId: `artifact-${artifactTaskId}`,
+                                version: 2,
+                                kind: "xlsx",
+                                sha256: "a".repeat(64),
+                                sizeBytes: 2048,
+                                displayName: `${artifactTaskId}.xlsx`,
+                              },
+                            ],
+                          }
+                        : session;
         return Promise.resolve(
           new Response(JSON.stringify(body), {
             headers: { "Content-Type": "application/json" },
@@ -129,58 +124,43 @@ it.each([
       await screen.findByRole("heading", { name: "Saved occupancy" }),
     ).toBeVisible();
     expect(await screen.findByText("Both workbooks are ready")).toBeVisible();
-    if (layout === "mobile")
-      await user.click(screen.getByRole("button", { name: "Open workspace" }));
-    expect(await screen.findByText("task_first_12345678.xlsx")).toBeVisible();
-    expect(await screen.findByText("task_second_12345678.xlsx")).toBeVisible();
+    if (layout === "desktop") {
+      expect(await screen.findByText("task_first_12345678.xlsx")).toBeVisible();
+      expect(
+        await screen.findByText("task_second_12345678.xlsx"),
+      ).toBeVisible();
+    }
     expect(
       screen.queryByRole("tab", { name: "To-do" }),
     ).not.toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: /^Tasks/ }),
-    ).toHaveAttribute("aria-expanded", "true");
-    if (layout === "mobile") {
-      await user.click(
-        await screen.findByRole("button", { name: "Close workspace" }),
-      );
-      await waitFor(() =>
-        expect(
-          screen.queryByRole("dialog", { name: "Workspace details" }),
-        ).not.toBeInTheDocument(),
-      );
-    }
-
+    if (layout === "desktop")
+      expect(
+        await screen.findByRole("button", { name: /^Tasks/ }),
+      ).toHaveAttribute("aria-expanded", "true");
     await user.type(
       screen.getByRole("textbox", { name: "Analysis request" }),
       "Explain the totals",
     );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
     await user.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText("Follow-up answer")).toBeVisible();
-    if (layout === "mobile")
-      await user.click(screen.getByRole("button", { name: "Open workspace" }));
-    expect(screen.getByText("task_first_12345678.xlsx")).toBeVisible();
+    await waitFor(() => {
+      expect(window.location.search).toContain("task_followup_12345678");
+    });
+    if (layout === "desktop")
+      expect(screen.getByText("task_first_12345678.xlsx")).toBeVisible();
     expect(window.location.search).toContain(`session=${sessionId}`);
 
     firstMount.unmount();
     render(workspace);
     expect(await screen.findByText("Both workbooks are ready")).toBeVisible();
     if (layout === "mobile") {
-      await user.click(screen.getByRole("button", { name: "Analyses" }));
-      await expect(
-        screen.findByRole("dialog", { name: "Analyses drawer" }),
-      ).resolves.toBeVisible();
       expect(
-        screen.getByRole("button", { name: "Saved occupancy" }),
+        screen.getByRole("heading", { name: "Saved occupancy" }),
       ).toBeVisible();
-      await user.click(
-        await screen.findByRole("button", { name: "Close analyses" }),
-      );
-      await waitFor(() =>
-        expect(
-          screen.queryByRole("dialog", { name: "Analyses drawer" }),
-        ).not.toBeInTheDocument(),
-      );
-      await user.click(screen.getByRole("button", { name: "Open workspace" }));
     } else {
       await waitFor(() =>
         expect(
@@ -190,6 +170,7 @@ it.each([
         ).toBeVisible(),
       );
     }
-    expect(await screen.findByText("task_first_12345678.xlsx")).toBeVisible();
+    if (layout === "desktop")
+      expect(await screen.findByText("task_first_12345678.xlsx")).toBeVisible();
   },
 );

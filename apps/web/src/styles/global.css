@@ -108,6 +108,9 @@ textarea,
 .fabric-connection--pending {
   color: #e8d5a8;
 }
+.fabric-connection--checking {
+  color: #c9d1ca;
+}
 .fabric-connection--unavailable {
   color: #efc0b4;
 }

@@ -172,8 +172,8 @@ def test_rbac_contract_loads_without_an_azure_login(tmp_path: Path) -> None:
             {
                 "webIdentityPrincipalId": {"value": "web"},
                 "workerIdentityPrincipalId": {"value": "worker"},
-                "hostedAgentPrincipalId": {"value": "hosted"},
                 "storageAccountId": {"value": "/resourceGroups/rg/storage"},
+                "sandboxGroupId": {"value": "/resourceGroups/rg/sandbox"},
                 "cosmosAccountId": {"value": "/resourceGroups/rg/cosmos"},
                 "redisClusterId": {"value": "/resourceGroups/rg/redis"},
             }
@@ -185,16 +185,16 @@ def test_rbac_contract_loads_without_an_azure_login(tmp_path: Path) -> None:
     expected = load_expected_assignments(ROOT / "scripts/rbac-assignments.json", outputs)
 
     assert len(expected.arm) == 3
-    assert len(expected.cosmos_sql) == 3
-    assert len(expected.redis_access_policies) == 3
+    assert len(expected.cosmos_sql) == 2
+    assert len(expected.redis_access_policies) == 2
 
 
 def test_rbac_contract_verifies_redis_access_policy_assignments() -> None:
     outputs = {
         "webIdentityPrincipalId": "web",
         "workerIdentityPrincipalId": "worker",
-        "hostedAgentPrincipalId": "hosted",
         "storageAccountId": "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/store",
+        "sandboxGroupId": "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/sandboxGroups/sbg",
         "cosmosAccountId": "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos",
         "redisClusterId": "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Cache/redisEnterprise/cache",
     }
@@ -204,13 +204,21 @@ def test_rbac_contract_verifies_redis_access_policy_assignments() -> None:
     def runner(arguments: list[str]) -> list[dict[str, Any]]:
         calls.append(tuple(arguments))
         if arguments[:2] == ["role", "assignment"]:
+            if outputs["sandboxGroupId"].lower() in arguments:
+                return [
+                    {
+                        "principalId": "web",
+                        "scope": outputs["sandboxGroupId"],
+                        "roleDefinitionId": "c24cf47c-5077-412d-a19c-45202126392c",
+                    }
+                ]
             return [
                 {
                     "principalId": principal,
                     "scope": outputs["storageAccountId"],
                     "roleDefinitionId": BLOB_DATA_CONTRIBUTOR_ROLE_ID,
                 }
-                for principal in ("web", "worker", "hosted")
+                for principal in ("web", "worker")
             ]
         if arguments[:4] == ["cosmosdb", "sql", "role", "assignment"]:
             return [
@@ -219,7 +227,7 @@ def test_rbac_contract_verifies_redis_access_policy_assignments() -> None:
                     "scope": "/",
                     "roleDefinitionId": COSMOS_DATA_CONTRIBUTOR_ROLE_ID,
                 }
-                for principal in ("web", "worker", "hosted")
+                for principal in ("web", "worker")
             ]
         if arguments[:3] == ["rest", "--method", "GET"]:
             return [
@@ -227,7 +235,7 @@ def test_rbac_contract_verifies_redis_access_policy_assignments() -> None:
                     "name": name,
                     "properties": {"accessPolicyName": "default", "user": {"objectId": principal}},
                 }
-                for name, principal in (("web", "web"), ("worker", "worker"), ("hostedAgent", "hosted"))
+                for name, principal in (("web", "web"), ("worker", "worker"))
             ]
         return []
 

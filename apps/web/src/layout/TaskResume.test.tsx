@@ -127,7 +127,9 @@ describe.each([
     await user.type(composer, "How many rooms?{Enter}");
 
     expect(composer).toHaveValue("How many rooms?");
-    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Send to the running analysis" }),
+    ).toBeDisabled();
     expect(
       vi
         .mocked(fetch)

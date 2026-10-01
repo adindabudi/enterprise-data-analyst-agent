@@ -130,15 +130,19 @@ class ContentFreeLogRecordProcessor:
 def configure_logging() -> None:
     """Uvicorn only configures its own loggers, so ours reached stderr unformatted or not at all.
 
-    Scoped to our own logger: at INFO the Azure SDKs narrate every HTTP call.
+    Scoped to our own loggers: at INFO the Azure SDKs narrate every HTTP call. The analyst runtime
+    runs in this process, so its `eda_worker` loggers print here too; their level is left to the
+    process, so warnings and failures show without the worker's INFO narration.
     """
-    api_logger = logging.getLogger("eda_api")
-    if api_logger.handlers:
-        return
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
-    api_logger.addHandler(handler)
-    api_logger.setLevel(logging.INFO)
+    for name, level in (("eda_api", logging.INFO), ("eda_worker", None)):
+        logger = logging.getLogger(name)
+        if logger.handlers:
+            continue
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+        logger.addHandler(handler)
+        if level is not None:
+            logger.setLevel(level)
 
 
 def configure_telemetry() -> None:

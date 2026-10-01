@@ -15,7 +15,7 @@ from eda_worker.history.compaction import hard_ceiling_compactor
 from eda_worker.model.profiles import MODEL_PROFILES
 from eda_worker.tools.capabilities import ProgressReporter
 
-from .progress import ToolProgressMiddleware
+from .progress import TodoReporter, TodoUpdateMiddleware, ToolProgressMiddleware
 from .prompt_loader import LoadedPrompt
 
 # Foundry's GA web search tool grounds through Bing and supports only OpenAI-family models.
@@ -37,15 +37,19 @@ def create_primary_harness(
     document_middleware: Sequence[Any] = (),
     fabric_readiness: FabricReadiness | None = None,
     progress: ProgressReporter | None = None,
+    todo_reporter: TodoReporter | None = None,
+    extra_context_providers: Sequence[Any] = (),
 ):
     active_fabric_readiness = fabric_readiness or FabricReadiness(status=FabricReadinessStatus.DISABLED)
     _validate_fabric_tools(tools, active_fabric_readiness)
-    context_providers: list[Any] = [task_state_provider]
+    context_providers: list[Any] = [task_state_provider, *extra_context_providers]
     if active_fabric_readiness.status is FabricReadinessStatus.CONFIGURED:
         context_providers.append(FabricPendingValidationContextProvider())
     middleware: list[Any] = list(document_middleware)
     if progress is not None:
         middleware.append(ToolProgressMiddleware(progress))
+    if todo_reporter is not None:
+        middleware.append(TodoUpdateMiddleware(todo_reporter))
     web_search_supported = MODEL_PROFILES[prompt.profile_id].expected_base_model in _WEB_SEARCH_BASE_MODELS
     return create_harness_agent(
         client=client,

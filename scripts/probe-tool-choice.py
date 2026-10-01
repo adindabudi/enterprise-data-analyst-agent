@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,7 @@ from azure.identity.aio import AzureCliCredential
 from eda_api.chat.model import load_interactive_model_config
 from eda_api.chat.service import FABRIC_QUERY_DESCRIPTION, GRAPH_QUERY_DESCRIPTION
 from eda_api.fabric_auth.graph import FabricGraphQueryService
+from eda_api.fabric_auth.snapshot import RELATIONSHIP_QUERY, relationships_from_rows
 from eda_api.fabric_ontology import OntologyTarget
 from eda_runtime_state.models import TaskPartition
 
@@ -167,7 +169,9 @@ async def main() -> int:
         }
     )
     service = FabricGraphQueryService(target, token_provider=AzCliToken())
-    relationships = await service.relationships(PARTITION)
+    introspected = await service.execute_evidence(PARTITION, RELATIONSHIP_QUERY)
+    edges = relationships_from_rows(json.loads(introspected.complete))
+    relationships = "; ".join(f"{edge.name} ({edge.source} -> {edge.target})" for edge in edges)
     print(f"relationships: {relationships}\n")
 
     async with AzureCliCredential() as credential:

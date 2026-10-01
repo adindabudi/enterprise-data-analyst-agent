@@ -273,6 +273,25 @@ def test_harness_passes_one_history_and_one_task_state_provider(monkeypatch: pyt
     assert captured[0]["context_providers"] == [task_state_provider]
 
 
+def test_host_context_providers_follow_the_task_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[dict[str, Any]] = []
+    source_schema = object()
+    monkeypatch.setattr(factory, "create_harness_agent", lambda **kwargs: captured.append(kwargs) or SimpleNamespace())
+    monkeypatch.setattr(factory, "hard_ceiling_compactor", lambda _: object())
+
+    factory.create_primary_harness(
+        "client",
+        "history",
+        "task-state",
+        _tools(),
+        "tokenizer",
+        _prompt(),
+        extra_context_providers=(source_schema,),
+    )
+
+    assert captured[0]["context_providers"] == ["task-state", source_schema]
+
+
 def test_factory_uses_prevalidated_combined_skills_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[dict[str, Any]] = []
     monkeypatch.setattr(factory, "create_harness_agent", lambda **kwargs: captured.append(kwargs) or SimpleNamespace())

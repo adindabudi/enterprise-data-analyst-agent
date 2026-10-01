@@ -2,6 +2,7 @@ import { withSessionHistory } from "../test/session-history";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -166,11 +167,7 @@ describe("workspace layout", () => {
       />,
     );
 
-    expect(
-      screen.getByText(
-        "Answers chat questions; deep analysis awaits acceptance",
-      ),
-    ).toBeVisible();
+    expect(screen.getByText("Connected; acceptance pending")).toBeVisible();
 
     rerender(
       <DesktopWorkspace
@@ -191,7 +188,7 @@ describe("workspace layout", () => {
     render(<MobileWorkspace />);
     const trigger = screen.getByRole("button", { name: "Analyses" });
 
-    await user.click(trigger);
+    fireEvent.click(trigger);
     expect(
       await screen.findByRole("dialog", { name: "Analyses drawer" }),
     ).toBeVisible();
@@ -208,8 +205,6 @@ describe("workspace layout", () => {
     });
 
     await user.type(composer, "Unsent draft");
-    await user.click(screen.getByRole("button", { name: "Add context" }));
-    await user.click(screen.getByRole("menuitem", { name: "Deep analysis" }));
     const newChat = screen.getAllByRole("button", { name: "New chat" }).at(0);
     if (!newChat) throw new Error("New chat control is unavailable");
     await user.click(newChat);
@@ -222,7 +217,6 @@ describe("workspace layout", () => {
     ).not.toBeInTheDocument();
     expect(newComposer).toHaveValue("");
     expect(newComposer).toHaveFocus();
-    expect(screen.queryByText("Deep analysis enabled")).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "New private analysis" }),
     ).toBeVisible();
@@ -294,12 +288,15 @@ describe("workspace layout", () => {
     );
     render(<DesktopWorkspace />);
 
-    await user.click(screen.getByRole("button", { name: "Add context" }));
-    await user.click(screen.getByRole("menuitem", { name: "Deep analysis" }));
     await user.type(
       screen.getByPlaceholderText("Ask about your analysis"),
       "Compare FY2026 regional revenue",
     );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(
@@ -307,7 +304,7 @@ describe("workspace layout", () => {
         screen.getByRole("region", { name: "Analysis conversation" }),
       ).getByText("Compare FY2026 regional revenue"),
     ).toBeVisible();
-    expect(await screen.findAllByText("Agent is thinking")).toHaveLength(2);
+    expect(await screen.findAllByText("Working")).not.toHaveLength(0);
     expect(window.location.search).toBe(
       "?session=ses_analysis_12345678&task=task_analysis_12345678",
     );
@@ -316,39 +313,30 @@ describe("workspace layout", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("uses direct streaming for Ask without creating a durable task", async () => {
+  it("sends default requests through the durable task endpoint", async () => {
     const user = userEvent.setup();
     document.cookie = "eda_csrf=csrf-value; Path=/";
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessionId: "ses_chat_12345678",
-            title: "Lamna healthcare operations",
-          }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ messageId: "msg_chat_12345678" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          [
-            'event: status\ndata: {"message":"Agent is thinking"}\n\n',
-            'event: delta\ndata: {"text":"Hello from the direct agent."}\n\n',
-            'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-          ].join(""),
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = requestUrl(input);
+      if (path === "/api/sessions")
+        return Promise.resolve(
+          jsonResponse(
+            { sessionId: "ses_chat_12345678", title: "Private chat" },
+            201,
+          ),
+        );
+      if (path.endsWith("/messages"))
+        return Promise.resolve(
+          jsonResponse({ messageId: "msg_chat_12345678" }, 201),
+        );
+      if (path.endsWith("/tasks") && init?.method === "POST")
+        return Promise.resolve(
+          jsonResponse({ taskId: "task_chat_12345678" }, 202),
+        );
+      if (path.endsWith("/artifacts"))
+        return Promise.resolve(jsonResponse({ artifacts: [] }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
     vi.stubGlobal("fetch", withSessionHistory(fetchMock));
     render(<DesktopWorkspace />);
 
@@ -356,226 +344,111 @@ describe("workspace layout", () => {
       screen.getByPlaceholderText("Ask about your analysis"),
       "Explain decimal precision",
     );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
+    await waitFor(() => {
+      expect(window.location.search).toBe(
+        "?session=ses_chat_12345678&task=task_chat_12345678",
+      );
+    });
     expect(
-      await screen.findByText("Hello from the direct agent."),
-    ).toBeVisible();
-    expect(
-      fetchMock.mock.calls.some(([path]) =>
-        requestUrl(path).includes("/tasks"),
-      ),
+      fetchMock.mock.calls.some(([path]) => requestUrl(path).includes("/chat")),
     ).toBe(false);
-    expect(window.location.search).toBe("?session=ses_chat_12345678");
+    const taskCall = fetchMock.mock.calls.find(([path]) =>
+      requestUrl(path).endsWith("/tasks"),
+    );
+    expect(taskCall?.[1]?.body).toBe(
+      JSON.stringify({ messageId: "msg_chat_12345678", history: [] }),
+    );
   });
 
-  it("keeps the reads of a finished turn with the answer they produced", async () => {
+  it("shows a retry-later status without dropping the question when the queue is full", async () => {
     const user = userEvent.setup();
     document.cookie = "eda_csrf=csrf-value; Path=/";
-    const step = {
-      stepId: "step-1",
-      kind: "gql",
-      label: "Queried lamna-healthcare graph",
-      state: "completed",
-      query: "MATCH (r:rooms) RETURN count(*) AS total",
-      source: "lamna-healthcare",
-      rowCount: "24",
-      querySha256: "a".repeat(64),
-    };
-    const failedStep = {
-      ...step,
-      stepId: "step-2",
-      state: "failed",
-      query: "MATCH (a)-[]->(b) RETURN a",
-      querySha256: "b".repeat(64),
-      rowCount: undefined,
-      detail: "The relationship pattern does not match any edge type.",
-    };
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessionId: "ses_chat_12345678",
-            title: "Lamna healthcare operations",
-          }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ messageId: "msg_chat_12345678" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          [
-            `event: data_step\ndata: ${JSON.stringify({ ...step, state: "running" })}\n\n`,
-            `event: data_step\ndata: ${JSON.stringify(step)}\n\n`,
-            `event: data_step\ndata: ${JSON.stringify(failedStep)}\n\n`,
-            'event: delta\ndata: {"text":"24 kamar."}\n\n',
-            'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-          ].join(""),
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = requestUrl(input);
+      if (path === "/api/sessions")
+        return Promise.resolve(
+          jsonResponse({ sessionId: "ses_queue_12345678" }, 201),
+        );
+      if (path.endsWith("/messages"))
+        return Promise.resolve(
+          jsonResponse({ messageId: "msg_queue_12345678" }, 201),
+        );
+      if (path.endsWith("/tasks") && init?.method === "POST")
+        return Promise.resolve(jsonResponse({ title: "Queue full" }, 429));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
     vi.stubGlobal("fetch", withSessionHistory(fetchMock));
     render(<DesktopWorkspace />);
 
     await user.type(
-      screen.getByPlaceholderText("Ask about your analysis"),
-      "berapa kamar?",
+      screen.getByRole("textbox", { name: "Analysis request" }),
+      "Try a queued analysis",
     );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(await screen.findByText("24 kamar.")).toBeVisible();
-    // One read reported twice is one step; the separate failed attempt is another.
-    const summary = await screen.findByRole("button", {
-      name: /Analyzed · 2 data steps/,
-    });
-    expect(summary).toBeVisible();
-    const [firstQueryButton] = screen.getAllByRole("button", {
-      name: "Queried lamna-healthcare graph",
-    });
-    if (!firstQueryButton)
-      throw new Error("Expected the first graph query step");
-    await user.click(firstQueryButton);
-    expect(screen.getByText(step.query)).toBeVisible();
-    expect(screen.getByText(/24 rows/)).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "Provenance" }));
-    const provenance = screen.getByRole("region", { name: "Provenance" });
-    const question = within(provenance).getByRole("group", {
-      name: "berapa kamar?",
-    });
     expect(
-      within(question).getByText("Read 24 rows from lamna-healthcare"),
+      (
+        await screen.findAllByText(
+          "The analysis queue is full. Try again shortly.",
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(
+        screen.getByRole("region", { name: "Analysis conversation" }),
+      ).getByText("Try a queued analysis"),
     ).toBeVisible();
-    expect(within(provenance).getByText(step.query)).toBeVisible();
-    expect(within(provenance).getByText(/query SHA-256 a{12}…/)).toBeVisible();
-    expect(within(question).getByText(failedStep.query)).toBeVisible();
-    expect(within(question).getByText("Failed query")).toBeVisible();
   });
 
-  it("keeps follow-up messages in one backend session", async () => {
+  it("keeps task provenance with the question that produced it", async () => {
     const user = userEvent.setup();
     document.cookie = "eda_csrf=csrf-value; Path=/";
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessionId: "ses_thread_12345678",
-            title: "Lamna healthcare operations",
-          }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ messageId: "msg_thread_12345678" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          'event: delta\ndata: {"text":"First answer."}\n\n' +
-            'event: completed\ndata: {"messageId":"msg_reply_12345678"}\n\n',
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ messageId: "msg_followup_12345678" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          'event: delta\ndata: {"text":"Second answer."}\n\n' +
-            'event: completed\ndata: {"messageId":"msg_reply_87654321"}\n\n',
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
-    vi.stubGlobal("fetch", withSessionHistory(fetchMock));
-    render(<DesktopWorkspace />);
-    const composer = screen.getByRole("textbox", {
-      name: "Analysis request",
-    });
-
-    await user.type(composer, "First question");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText("First answer.")).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "First question" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "First question" }),
-    ).toHaveAttribute("aria-current", "page");
-    await user.type(composer, "Follow up");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText("Second answer.")).toBeVisible();
-
-    expect(
-      fetchMock.mock.calls.filter(
-        ([path]) => requestUrl(path) === "/api/sessions",
-      ),
-    ).toHaveLength(1);
-    expect(fetchMock.mock.calls.map(([path]) => requestUrl(path))).toContain(
-      "/api/sessions/ses_thread_12345678/messages",
-    );
-  });
-
-  it("stops reporting progress for reads the reader interrupted", async () => {
-    const user = userEvent.setup();
-    document.cookie = "eda_csrf=csrf-value; Path=/";
-    const step = {
-      stepId: "step-1",
-      kind: "gql",
-      label: "Queried lamna-healthcare graph",
-      state: "running",
+    const query = {
+      artifactId: "artifact-rooms_12345678",
+      version: 1,
+      sha256: "b".repeat(64),
+      displayName: "rooms.json",
       query: "MATCH (r:rooms) RETURN count(*) AS total",
-      source: "lamna-healthcare",
       querySha256: "a".repeat(64),
+      rowCount: 24,
+      sourceAlias: "lamna-healthcare",
+      messageId: "msg_chat_12345678",
+      executedAt: "2026-09-06T01:00:00Z",
     };
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessionId: "ses_stop_12345678",
-            title: "Lamna healthcare operations",
-          }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ messageId: "msg_stop_12345678" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) =>
-        Promise.resolve(
-          new Response(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                controller.enqueue(
-                  new TextEncoder().encode(
-                    `event: data_step\ndata: ${JSON.stringify(step)}\n\n`,
-                  ),
-                );
-                // The turn stays open until Stop, exactly as an unfinished fetch would.
-                init?.signal?.addEventListener("abort", () => {
-                  controller.error(new DOMException("Aborted", "AbortError"));
-                });
-              },
-            }),
-            { status: 200, headers: { "Content-Type": "text/event-stream" } },
-          ),
-        ),
-      );
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = requestUrl(input);
+      if (path === "/api/sessions")
+        return Promise.resolve(
+          jsonResponse({ sessionId: "ses_chat_12345678" }, 201),
+        );
+      if (path.endsWith("/messages"))
+        return Promise.resolve(
+          jsonResponse({ messageId: "msg_chat_12345678" }, 201),
+        );
+      if (path.endsWith("/tasks") && init?.method === "POST")
+        return Promise.resolve(
+          jsonResponse({ taskId: "task_chat_12345678" }, 202),
+        );
+      if (path.endsWith("/provenance"))
+        return Promise.resolve(
+          jsonResponse({ sourceQueries: [query], artifacts: [] }),
+        );
+      if (path.endsWith("/artifacts"))
+        return Promise.resolve(jsonResponse({ artifacts: [] }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
     vi.stubGlobal("fetch", withSessionHistory(fetchMock));
     render(<DesktopWorkspace />);
 
@@ -583,45 +456,103 @@ describe("workspace layout", () => {
       screen.getByRole("textbox", { name: "Analysis request" }),
       "berapa kamar?",
     );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
     await user.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText(step.label)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Stop current task" }));
+    await waitFor(() => {
+      expect(window.location.search).toContain("task_chat_12345678");
+    });
+    await user.click(screen.getByRole("button", { name: "Provenance" }));
 
-    // A spinner that never stops claims a read is still running after the turn ended.
-    expect(await screen.findByText("Response stopped")).toBeVisible();
+    const group = await screen.findByRole("group", { name: "berapa kamar?" });
+    expect(within(group).getByText(query.query)).toBeVisible();
     expect(
-      screen.queryByRole("progressbar", { name: "Reading the source" }),
-    ).not.toBeInTheDocument();
+      within(group).getByText("Read 24 rows from lamna-healthcare"),
+    ).toBeVisible();
   });
 
-  it("ignores an aborted turn after switching to a new chat", async () => {
+  it("sends a second submission as steering while a task is running", async () => {
     const user = userEvent.setup();
     document.cookie = "eda_csrf=csrf-value; Path=/";
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessionId: "ses_stale_12345678",
-            title: "Lamna healthcare operations",
-          }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = requestUrl(input);
+      if (path === "/api/sessions")
+        return Promise.resolve(
+          jsonResponse({ sessionId: "ses_steer_12345678" }, 201),
+        );
+      if (path.endsWith("/messages"))
+        return Promise.resolve(
+          jsonResponse({ messageId: "msg_steer_12345678" }, 201),
+        );
+      if (path.endsWith("/tasks") && init?.method === "POST")
+        return Promise.resolve(
+          jsonResponse({ taskId: "task_steer_12345678" }, 202),
+        );
+      if (path.endsWith("/steer"))
+        return Promise.resolve(
+          jsonResponse({ commandId: "cmd_steer_12345678" }, 202),
+        );
+      if (path.endsWith("/artifacts"))
+        return Promise.resolve(jsonResponse({ artifacts: [] }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal("fetch", withSessionHistory(fetchMock));
+    render(<DesktopWorkspace />);
+    const composer = screen.getByRole("textbox", { name: "Analysis request" });
+
+    await user.type(composer, "First question");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(window.location.search).toContain("task_steer_12345678");
+    });
+    await user.type(composer, "Also include occupancy");
+    await user.click(
+      screen.getByRole("button", { name: "Send to the running analysis" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([path]) =>
+          requestUrl(path).endsWith("/steer"),
         ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ messageId: "msg_stale_12345678" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockImplementationOnce(
-        (_input: RequestInfo | URL, init?: RequestInit) =>
-          new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener("abort", () => {
-              reject(new DOMException("Aborted", "AbortError"));
-            });
-          }),
-      );
+      ).toBe(true);
+    });
+    expect(screen.getByText("Sent to the running analysis")).toBeVisible();
+  });
+
+  it("cancels the current durable task when stopped", async () => {
+    const user = userEvent.setup();
+    document.cookie = "eda_csrf=csrf-value; Path=/";
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = requestUrl(input);
+      if (path === "/api/sessions")
+        return Promise.resolve(
+          jsonResponse({ sessionId: "ses_stop_12345678" }, 201),
+        );
+      if (path.endsWith("/messages"))
+        return Promise.resolve(
+          jsonResponse({ messageId: "msg_stop_12345678" }, 201),
+        );
+      if (path.endsWith("/tasks") && init?.method === "POST")
+        return Promise.resolve(
+          jsonResponse({ taskId: "task_stop_12345678" }, 202),
+        );
+      if (path.endsWith("/cancel"))
+        return Promise.resolve(
+          jsonResponse({ commandId: "cmd_cancel_12345678" }, 202),
+        );
+      if (path.endsWith("/artifacts"))
+        return Promise.resolve(jsonResponse({ artifacts: [] }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
     vi.stubGlobal("fetch", withSessionHistory(fetchMock));
     render(<DesktopWorkspace />);
 
@@ -629,99 +560,166 @@ describe("workspace layout", () => {
       screen.getByRole("textbox", { name: "Analysis request" }),
       "Slow question",
     );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
     await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Stop current task" }),
+      ).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Stop current task" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([path]) =>
+          requestUrl(path).endsWith("/cancel"),
+        ),
+      ).toBe(true);
+    });
     expect(
-      screen.getByRole("button", { name: "Stop current task" }),
-    ).toBeEnabled();
+      screen.getByText("Cancellation queued for the next checkpoint"),
+    ).toBeVisible();
+  });
+
+  it("keeps a detached task out of a new chat", async () => {
+    const user = userEvent.setup();
+    document.cookie = "eda_csrf=csrf-value; Path=/";
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = requestUrl(input);
+      if (path === "/api/sessions")
+        return Promise.resolve(
+          jsonResponse({ sessionId: "ses_stale_12345678" }, 201),
+        );
+      if (path.endsWith("/messages"))
+        return Promise.resolve(
+          jsonResponse({ messageId: "msg_stale_12345678" }, 201),
+        );
+      if (path.endsWith("/tasks") && init?.method === "POST")
+        return Promise.resolve(
+          jsonResponse({ taskId: "task_stale_12345678" }, 202),
+        );
+      if (path.endsWith("/artifacts"))
+        return Promise.resolve(jsonResponse({ artifacts: [] }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal("fetch", withSessionHistory(fetchMock));
+    render(<DesktopWorkspace />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Analysis request" }),
+      "Slow question",
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(window.location.search).toContain("task_stale_12345678");
+    });
     const newChat = screen.getAllByRole("button", { name: "New chat" }).at(0);
     if (!newChat) throw new Error("New chat control is unavailable");
     await user.click(newChat);
 
     expect(await screen.findByText("Ready")).toBeVisible();
-    expect(screen.queryByText("Response stopped")).not.toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "Analysis request" }),
     ).toBeEnabled();
+    expect(window.location.search).toBe("");
   });
 
-  it("follows a model-selected deep-analysis handoff without a second client task request", async () => {
-    const user = userEvent.setup();
-    document.cookie = "eda_csrf=csrf-value; Path=/";
-    const step = {
-      stepId: "step-handoff",
-      kind: "gql",
-      label: "Read room occupancy",
-      state: "completed",
-      query: "MATCH (room:rooms) RETURN room.RoomType, count(room)",
-      source: "lamna-healthcare",
-      querySha256: "a".repeat(64),
-      rowCount: "5",
-    };
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessionId: "ses_auto_12345678",
-            title: "Lamna healthcare operations",
+  it("shows the plan as the agent writes it, before the run finishes", async () => {
+    class EventSourceFixture {
+      static current: EventSourceFixture | undefined;
+      readonly listeners = new Map<
+        string,
+        (event: MessageEvent<string>) => void
+      >();
+      onopen: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      constructor(readonly url: string) {
+        EventSourceFixture.current = this;
+      }
+
+      addEventListener(type: string, listener: EventListener): void {
+        this.listeners.set(type, listener);
+      }
+
+      close(): void {}
+
+      emit(type: string, value: object, id: string): void {
+        this.listeners.get(type)?.(
+          new MessageEvent(type, {
+            data: JSON.stringify(value),
+            lastEventId: id,
           }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
+        );
+      }
+    }
+    Object.defineProperty(globalThis, "EventSource", {
+      configurable: true,
+      value: EventSourceFixture,
+      writable: true,
+    });
+    window.history.replaceState(null, "", "/?task=task_live_plan_12345678");
+    vi.stubGlobal(
+      "fetch",
+      withSessionHistory(
+        vi.fn<typeof fetch>(() =>
+          Promise.resolve(new Response(JSON.stringify({ artifacts: [] }))),
         ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ messageId: "msg_auto_12345678" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          [
-            'event: status\ndata: {"message":"Agent is thinking"}\n\n',
-            `event: data_step\ndata: ${JSON.stringify(step)}\n\n`,
-            'event: analysis_started\ndata: {"taskId":"task_auto_12345678"}\n\n',
-          ].join(""),
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
-    vi.stubGlobal("fetch", withSessionHistory(fetchMock));
-    render(<DesktopWorkspace />);
-
-    await user.type(
-      screen.getByPlaceholderText("Ask about your analysis"),
-      "Build and validate a workbook",
-    );
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-
-    expect(
-      await screen.findAllByText("Running a deeper analysis"),
-    ).not.toHaveLength(0);
-    const dataSteps = screen.getByRole("region", { name: "Data steps" });
-    expect(dataSteps.closest("article")).toHaveTextContent(
-      "Build and validate a workbook",
-    );
-    expect(
-      screen.queryByRole("progressbar", { name: "Reading the source" }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      within(dataSteps).getByRole("button", { name: /Analyzed · 1 data step/ }),
-    );
-    await user.click(
-      within(dataSteps).getByRole("button", { name: step.label }),
-    );
-    expect(within(dataSteps).getByText(step.query)).toBeVisible();
-    expect(window.location.search).toBe(
-      "?session=ses_auto_12345678&task=task_auto_12345678",
-    );
-    expect(
-      fetchMock.mock.calls.some(
-        ([path, init]) =>
-          requestUrl(path).includes("/tasks") && init?.method === "POST",
       ),
-    ).toBe(false);
+    );
+    render(<DesktopWorkspace />);
+    await waitFor(() => {
+      expect(EventSourceFixture.current).toBeDefined();
+    });
+    const plan = (completed: boolean) => ({
+      eventId: `evt_plan_${String(completed)}_12345678`,
+      sequence: completed ? 3 : 2,
+      sessionId: "ses_live_plan_12345678",
+      taskId: "task_live_plan_12345678",
+      occurredAt: "2026-09-24T00:00:00Z",
+      type: "todo.updated",
+      payload: [
+        {
+          todoId: "1",
+          text: "Susun rencana dashboard okupansi",
+          description: "Tetapkan ruang lingkup dashboard.",
+          completed,
+        },
+        { todoId: "2", text: "Bangun dashboard interaktif", completed: false },
+      ],
+      provenanceRefs: [],
+    });
+
+    act(() => {
+      EventSourceFixture.current?.emit(
+        "todo.updated",
+        plan(false),
+        "1700000000000-1",
+      );
+    });
+    expect(
+      await screen.findByText("Susun rencana dashboard okupansi"),
+    ).toBeVisible();
+    expect(screen.getByText("Tetapkan ruang lingkup dashboard.")).toBeVisible();
+    expect(screen.getByText("0 / 2")).toBeVisible();
+
+    act(() => {
+      EventSourceFixture.current?.emit(
+        "todo.updated",
+        plan(true),
+        "1700000000000-2",
+      );
+    });
+    expect(await screen.findByText("1 / 2")).toBeVisible();
   });
 
   it("shows live thinking feedback on compact layouts", async () => {
@@ -797,39 +795,27 @@ describe("workspace layout", () => {
     expect(screen.getByText("Preparing tools and response.")).toBeVisible();
   });
 
-  it("uses direct Ask streaming on compact layouts", async () => {
+  it("uses durable tasks on compact layouts", async () => {
     const user = userEvent.setup();
     document.cookie = "eda_csrf=csrf-value; Path=/";
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessionId: "ses_mobile_chat_12345678",
-            title: "Private chat",
-          }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ messageId: "msg_mobile_chat_12345678" }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          'event: delta\ndata: {"text":"Compact direct response."}\n\n' +
-            'event: completed\ndata: {"messageId":"msg_mobile_reply_12345678"}\n\n',
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ),
-      );
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = requestUrl(input);
+      if (path === "/api/sessions")
+        return Promise.resolve(
+          jsonResponse({ sessionId: "ses_mobile_chat_12345678" }, 201),
+        );
+      if (path.endsWith("/messages"))
+        return Promise.resolve(
+          jsonResponse({ messageId: "msg_mobile_chat_12345678" }, 201),
+        );
+      if (path.endsWith("/tasks") && init?.method === "POST")
+        return Promise.resolve(
+          jsonResponse({ taskId: "task_mobile_chat_12345678" }, 202),
+        );
+      if (path.endsWith("/artifacts"))
+        return Promise.resolve(jsonResponse({ artifacts: [] }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
     vi.stubGlobal("fetch", withSessionHistory(fetchMock));
     render(<MobileWorkspace />);
 
@@ -837,17 +823,35 @@ describe("workspace layout", () => {
       screen.getByRole("textbox", { name: "Analysis request" }),
       "Explain this briefly",
     );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(await screen.findByText("Compact direct response.")).toBeVisible();
+    await waitFor(() => {
+      expect(window.location.search).toBe(
+        "?session=ses_mobile_chat_12345678&task=task_mobile_chat_12345678",
+      );
+    });
     expect(
-      fetchMock.mock.calls.some(([path]) =>
-        requestUrl(path).includes("/tasks"),
-      ),
+      fetchMock.mock.calls.some(([path]) => requestUrl(path).includes("/chat")),
     ).toBe(false);
-    expect(window.location.search).toBe("?session=ses_mobile_chat_12345678");
   });
 });
+
+function jsonResponse(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 function requestUrl(value: RequestInfo | URL): string {
   return typeof value === "string"

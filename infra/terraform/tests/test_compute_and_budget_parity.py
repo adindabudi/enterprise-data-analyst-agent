@@ -59,7 +59,7 @@ def test_budget_module_and_tfvars_match_bicep_profiles() -> None:
 
     assert "location" in demo and '"southeastasia"' in demo
     assert "profile" in demo and '"demo"' in demo
-    assert "api_min_replicas                   = 0" in demo
+    assert "api_min_replicas                   = 1" in demo
     assert "api_max_replicas                   = 1" in demo
     assert "worker_min_replicas" not in demo
     assert "worker_max_replicas" not in demo
@@ -72,6 +72,7 @@ def test_budget_module_and_tfvars_match_bicep_profiles() -> None:
     assert "worker_max_replicas" not in production
     assert "redis_sku" in production and '"Balanced_B10"' in production
     assert "zone_redundancy_enabled" in production and "true" in production
+    assert "api_min_replicas must be at least 1" in variables
     assert 'variable "ready_sessions"' not in variables
     assert "ready_sessions" not in demo
     assert "ready_sessions" not in production

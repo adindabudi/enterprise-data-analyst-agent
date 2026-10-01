@@ -114,8 +114,8 @@ export function QueryProvenance({
                   </pre>
                   {step.queryTruncated && (
                     <Text size={200}>
-                      Request text is truncated for display; its hash
-                      identifies the full submitted request.
+                      Request text is truncated for display; its hash identifies
+                      the full submitted request.
                     </Text>
                   )}
                   {step.executedAt && (

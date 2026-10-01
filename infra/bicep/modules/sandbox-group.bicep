@@ -6,6 +6,7 @@ param sandboxSubnetId string
 param provisioningPrincipalId string
 param sessionInitIdentityResourceId string
 param tags object
+param webIdentityPrincipalId string
 
 var sandboxDataOwnerRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -45,6 +46,16 @@ resource provisioningSandboxDataOwner 'Microsoft.Authorization/roleAssignments@2
   scope: sandboxGroup
   properties: {
     principalId: provisioningPrincipalId
+    roleDefinitionId: sandboxDataOwnerRoleDefinitionId
+  }
+}
+
+resource webSandboxDataOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(sandboxGroup.id, webIdentityPrincipalId, sandboxDataOwnerRoleDefinitionId)
+  scope: sandboxGroup
+  properties: {
+    principalId: webIdentityPrincipalId
+    principalType: 'ServicePrincipal'
     roleDefinitionId: sandboxDataOwnerRoleDefinitionId
   }
 }

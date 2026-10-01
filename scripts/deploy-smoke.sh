@@ -29,7 +29,6 @@ azd_value() {
 environment_name="$(azd_value AZURE_ENV_NAME)"
 resource_group="$(azd_value AZURE_RESOURCE_GROUP)"
 api_app_id="$(azd_value API_APP_ID)"
-hosted_responses_endpoint="$(azd_value AGENT_LONG_JOB_RESPONSES_ENDPOINT)"
 app_url="${EDA_APP_URL:-$(azd_value API_URL)}"
 case "$app_url" in
     https://*) ;;
@@ -59,11 +58,10 @@ run_gate() {
     [ "$status" = "passed" ] || fail "deployment gate failed: ${gate_name}"
 }
 
-hosted_agent_ready() {
-    case "$hosted_responses_endpoint" in
-        https://*/responses | https://*/responses\?api-version=v1) ;;
-        *) return 1 ;;
-    esac
+analysis_runtime_ready() {
+    health_state="$(curl --fail --silent --show-error "${app_url%/}/health/ready" | jq -r '.components.analysisRuntime // empty')" \
+        || return 1
+    [ "$health_state" = "ready" ]
 }
 
 document_pack_ready() {
@@ -98,14 +96,14 @@ write_rbac_outputs() {
         --arg storage "$(azd_value STORAGE_ACCOUNT_ID)" \
         --arg cosmos "$(azd_value COSMOS_ACCOUNT_ID)" \
         --arg redis "$(azd_value REDIS_CLUSTER_ID)" \
+        --arg sandbox "/subscriptions/$(azd_value AZURE_SUBSCRIPTION_ID)/resourceGroups/$(azd_value EDA_SANDBOX_RESOURCE_GROUP)/providers/Microsoft.App/sandboxGroups/$(azd_value EDA_SANDBOX_GROUP)" \
         --arg web "$(azd_value WEB_IDENTITY_PRINCIPAL_ID)" \
         --arg worker "$(azd_value WORKER_IDENTITY_PRINCIPAL_ID)" \
-        --arg hosted "$(azd_value HOSTED_AGENT_PRINCIPAL_ID)" \
-        '{storageAccountId: {value: $storage}, cosmosAccountId: {value: $cosmos}, redisClusterId: {value: $redis}, webIdentityPrincipalId: {value: $web}, workerIdentityPrincipalId: {value: $worker}, hostedAgentPrincipalId: {value: $hosted}}'
+        '{storageAccountId: {value: $storage}, cosmosAccountId: {value: $cosmos}, redisClusterId: {value: $redis}, sandboxGroupId: {value: $sandbox}, webIdentityPrincipalId: {value: $web}, workerIdentityPrincipalId: {value: $worker}}'
 }
 
 run_gate api-readiness curl --fail --silent --show-error "${app_url%/}/health/ready"
-run_gate hosted-agent-readiness hosted_agent_ready
+run_gate analysis-runtime-readiness analysis_runtime_ready
 run_gate document-pack-intent document_pack_ready
 run_gate entra-federation python scripts/test-entra-app.py
 rbac_outputs="$(mktemp "${artifact_directory}/rbac-outputs.XXXXXX")" || fail "unable to create RBAC outputs"

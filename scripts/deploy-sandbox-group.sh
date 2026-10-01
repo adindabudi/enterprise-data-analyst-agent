@@ -34,6 +34,7 @@ sandbox_subnet_id="$(azd_value SANDBOX_SUBNET_ID)"
 provisioning_principal_id="$(azd_value AZURE_PRINCIPAL_ID)"
 session_init_identity_id="$(azd_value SESSION_INIT_IDENTITY_ID)"
 api_app_id="$(azd_value API_APP_ID)"
+web_identity_principal_id="$(azd_value WEB_IDENTITY_PRINCIPAL_ID)"
 
 case "$environment_name" in
     *[!a-z0-9-]* | '') fail "AZURE_ENV_NAME must contain only lowercase letters, digits, and hyphens" ;;
@@ -49,6 +50,10 @@ esac
 case "$provisioning_principal_id" in
     ????????-????-????-????-????????????) ;;
     *) fail "AZURE_PRINCIPAL_ID is not a principal ID" ;;
+esac
+case "$web_identity_principal_id" in
+    ????????-????-????-????-????????????) ;;
+    *) fail "WEB_IDENTITY_PRINCIPAL_ID is not a principal ID" ;;
 esac
 project_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 manifest_file="$project_root/.azure/$environment_name/sandbox-image.json"
@@ -75,12 +80,38 @@ deployment_outputs="$(az deployment group create \
         sandboxSubnetId="$sandbox_subnet_id" \
         provisioningPrincipalId="$provisioning_principal_id" \
         sessionInitIdentityResourceId="$session_init_identity_id" \
+        webIdentityPrincipalId="$web_identity_principal_id" \
         tags="{\"azd-env-name\":\"$environment_name\",\"application\":\"enterprise-data-analyst\",\"managedBy\":\"bicep\"}" \
     --query properties.outputs \
     --output json \
     --only-show-errors)" || fail "sandbox group deployment failed"
 sandbox_group_id="$(printf '%s' "$deployment_outputs" | jq -er '.sandboxGroupId.value | strings')" \
     || fail "sandbox group deployment did not return sandboxGroupId"
+sandbox_data_owner_role_id="/subscriptions/${subscription_id}/providers/Microsoft.Authorization/roleDefinitions/c24cf47c-5077-412d-a19c-45202126392c"
+existing_api_sandbox_owner="$(az role assignment list \
+    --assignee "$web_identity_principal_id" \
+    --scope "$sandbox_group_id" \
+    --role "$sandbox_data_owner_role_id" \
+    --query 'length(@)' \
+    --output tsv \
+    --only-show-errors)" || fail "unable to inspect API sandbox data-owner assignment"
+if [ "$existing_api_sandbox_owner" = "0" ]; then
+    az role assignment create \
+        --assignee-object-id "$web_identity_principal_id" \
+        --assignee-principal-type ServicePrincipal \
+        --role "$sandbox_data_owner_role_id" \
+        --scope "$sandbox_group_id" \
+        --only-show-errors >/dev/null \
+        || fail "unable to assign API sandbox data-owner role"
+fi
+verified_api_sandbox_owner="$(az role assignment list \
+    --assignee "$web_identity_principal_id" \
+    --scope "$sandbox_group_id" \
+    --role "$sandbox_data_owner_role_id" \
+    --query 'length(@)' \
+    --output tsv \
+    --only-show-errors)" || fail "unable to verify API sandbox data-owner assignment"
+[ "$verified_api_sandbox_owner" != "0" ] || fail "API sandbox data-owner assignment is missing"
 
 # Managed-identity disk imports are broken in azure-containerapps-sandbox 0.1.0b4
 # (microsoft/azure-container-apps#1768).
@@ -106,6 +137,7 @@ for variable in \
     "EDA_SANDBOX_SUBSCRIPTION_ID=$subscription_id" \
     "EDA_SANDBOX_RESOURCE_GROUP=$resource_group" \
     "EDA_SANDBOX_GROUP=$sandbox_group_name" \
+    "EDA_SANDBOX_GROUP_ID=$sandbox_group_id" \
     "EDA_SANDBOX_REGION=$location" \
     "EDA_SANDBOX_DISK_IMAGE_ID=$sandbox_disk_image_id" \
     "EDA_SANDBOX_IMAGE_DIGEST=$sandbox_digest"; do

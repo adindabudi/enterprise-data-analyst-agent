@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 from uuid import UUID
 
 import pytest
-from eda_api.fabric_auth.graph import FabricGraphQueryService, GraphQueryError
+from eda_api.fabric_auth.capacity import CapacityMonitor, CapacityState
+from eda_api.fabric_auth.graph import FabricGraphQueryService, GraphQueryError, run_graph_query
 from eda_api.fabric_ontology import OntologyTarget
 from eda_runtime_state.models import TaskPartition
 
@@ -98,22 +100,6 @@ def rows(data: list[list[object]]) -> Response:
         {
             "status": {"code": "00000"},
             "result": {"kind": "TABLE", "columns": [{"name": "dept"}, {"name": "total"}], "data": data},
-        }
-    )
-
-
-def edges() -> Response:
-    return Response(
-        {
-            "status": {"code": "00000"},
-            "result": {
-                "kind": "TABLE",
-                "columns": [{"name": "rel"}, {"name": "src"}, {"name": "dst"}, {"name": "n"}],
-                "data": [
-                    {"rel": ["rooms_has_departments"], "src": ["rooms"], "dst": ["departments"], "n": 414},
-                    {"rel": ["patients_has_rooms"], "src": ["patients"], "dst": ["rooms"], "n": 308},
-                ],
-            },
         }
     )
 
@@ -311,50 +297,152 @@ async def test_the_service_returns_the_nested_reason_for_a_rejected_query() -> N
 
 
 @pytest.mark.asyncio
-async def test_the_service_names_each_relationship_with_the_direction_a_traversal_needs() -> None:
-    client = Client({"/executeQuery": edges(), "/items": graph_items()})
-    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
+async def test_the_service_calls_the_documented_beta_endpoint() -> None:
+    client = Client({"/executeQuery": rows([[1, 24]]), "/items": graph_items()})
+    configured = TARGET.model_copy(update={"graph_model_id": UUID(GRAPH_MODEL)})
+    service = FabricGraphQueryService(configured, token_provider=Token(), client_factory=factory(client))
 
-    summary = await service.relationships(PARTITION)
+    await service.execute(PARTITION, "MATCH (r:rooms) RETURN count(*) AS total")
 
-    assert summary == "rooms_has_departments (rooms -> departments); patients_has_rooms (patients -> rooms)"
-    posts = len([url for method, url, _ in client.requests if "executeQuery" in url])
-    await service.relationships(PARTITION)
-    assert len([url for method, url, _ in client.requests if "executeQuery" in url]) == posts
+    [(_, url, _)] = client.requests
+    assert url.endswith(f"/v1/workspaces/{WORKSPACE}/graphModels/{GRAPH_MODEL}/executeQuery?beta=true")
 
 
 @pytest.mark.asyncio
-async def test_the_service_leaves_out_edges_it_could_not_name() -> None:
-    ragged = Response(
+async def test_no_rows_is_an_answer_not_an_error() -> None:
+    # The engine says 02000 with an empty table when nothing matched; that is what a filter found.
+    empty = Response({"status": {"code": "02000", "description": "note: no data"}, "result": {"data": []}})
+    client = Client({"/executeQuery": empty, "/items": graph_items()})
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
+
+    evidence = await service.execute_evidence(PARTITION, "MATCH (h:hospitals WHERE h.HospitalName = 'x') RETURN h")
+
+    assert evidence.preview == "[]" and evidence.row_count == 0
+    assert evidence.source_incomplete is False
+
+
+class Sequenced(Client):
+    """Answers each POST with the next response, as a query that is still running would."""
+
+    def __init__(self, answers: list[Response]) -> None:
+        super().__init__({"/items": graph_items()})
+        self.answers = answers
+
+    async def post(self, url: str, **kwargs: Any) -> Response:
+        self.requests.append(("POST", url, kwargs.get("content") or b""))
+        return self.answers.pop(0)
+
+
+def still_running(token: str) -> Response:
+    return Response(
         {
-            "status": {"code": "00000"},
-            "result": {
-                "kind": "TABLE",
-                "columns": [{"name": "rel"}, {"name": "src"}, {"name": "dst"}],
-                "data": [
-                    {"rel": ["rooms_has_departments"], "src": ["rooms"], "dst": ["departments"]},
-                    {"rel": ["rooms_has_departments"], "src": ["rooms"], "dst": ["departments"]},
-                    {"rel": [], "src": ["rooms"], "dst": []},
-                ],
-            },
+            "status": {"code": "02000", "description": "No data available, retry with continuation token"},
+            "result": {"kind": "TABLE", "columns": [], "data": [], "nextPage": token},
         }
     )
-    client = Client({"/executeQuery": ragged, "/items": graph_items()})
-    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
-
-    # A half-named edge reads as a real one, and the model would then write a traversal that cannot run.
-    assert await service.relationships(PARTITION) == "rooms_has_departments (rooms -> departments)"
 
 
 @pytest.mark.asyncio
-async def test_the_service_reads_relationships_without_asking_for_write_permission() -> None:
-    client = Client({"/executeQuery": edges(), "/items": graph_items()})
+async def test_a_query_still_running_is_followed_to_its_rows_not_read_as_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def no_wait(seconds: float) -> None:
+        del seconds
+
+    monkeypatch.setattr("eda_api.fabric_auth.graph.asyncio.sleep", no_wait)
+    client = Sequenced([still_running("a/b+c=="), rows([[1, 24]])])
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
+    query = "MATCH (r:rooms) RETURN count(*) AS total"
+
+    result = await service.execute(PARTITION, query)
+
+    posts = [(url, body) for method, url, body in client.requests if method == "POST"]
+    assert len(posts) == 2
+    # The token is opaque and percent-encoded once; the body repeats the same query.
+    assert posts[1][0].endswith("executeQuery?beta=true&continuationToken=a%2Fb%2Bc%3D%3D")
+    assert json.loads(posts[1][1]) == {"query": query}
+    assert "24" in result
+
+
+@pytest.mark.asyncio
+async def test_a_query_that_outlives_the_deadline_is_an_unknown_outcome() -> None:
+    client = Sequenced([still_running("token")] * 5)
+    owner_token = Token().value
+
+    with pytest.raises(GraphQueryError, match="still running"):
+        await run_graph_query(
+            client,
+            url="https://fabric.example/executeQuery?beta=true",
+            bearer_token=owner_token,
+            statement="MATCH (r:rooms) RETURN r",
+            deadline_seconds=0.0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_truncated_response_is_marked_incomplete() -> None:
+    truncated = Response(
+        {
+            "status": {
+                "code": "00000",
+                "additionalStatuses": [{"code": "01000", "description": "warning: result truncated"}],
+            },
+            "result": {"data": [{"n": 1}]},
+        }
+    )
+    client = Client({"/executeQuery": truncated, "/items": graph_items()})
     service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
 
-    await service.relationships(PARTITION)
+    evidence = await service.execute_evidence(PARTITION, "MATCH (r:rooms) RETURN r.RoomId AS id")
 
-    # getDefinition would name these too, but Fabric requires Item.ReadWrite.All for it.
-    assert not [url for _, url, _ in client.requests if "getDefinition" in url]
+    assert evidence.source_incomplete is True and evidence.row_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_parse_error_keeps_the_engines_message_and_drops_the_echoed_query() -> None:
+    parse_error = Response(
+        {
+            "status": {
+                "code": "42000",
+                "description": "error: syntax error or access rule violation",
+                "cause": {
+                    "code": "42000",
+                    "description": (
+                        "error: data exception; Syntax error at line 1:58\nOffending token: '.'\n"
+                        "MATCH (h:hospitals) RETURN h.HospitalName AS n GROUP BY h.HospitalName\n"
+                        "                                                         ^\n"
+                        "Error message: mismatched input '.' expecting {<EOF>, WHITESPACE}."
+                    ),
+                },
+            }
+        }
+    )
+    client = Client({"/executeQuery": parse_error, "/items": graph_items()})
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
+
+    with pytest.raises(GraphQueryError) as failed:
+        await service.execute(PARTITION, "MATCH (h:hospitals) RETURN h.HospitalName AS n GROUP BY h.HospitalName")
+
+    reason = str(failed.value)
+    assert "mismatched input '.'" in reason and "Syntax error at line 1:58" in reason
+    assert "GROUP BY h.HospitalName" not in reason and "^" not in reason
+
+
+@pytest.mark.asyncio
+async def test_a_throttled_query_waits_as_asked_and_runs_once_more(monkeypatch: pytest.MonkeyPatch) -> None:
+    waits: list[float] = []
+
+    async def record(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr("eda_api.fabric_auth.graph.asyncio.sleep", record)
+    throttled = Response({"errorCode": "TooManyRequests"}, status_code=429)
+    throttled.headers = {"Retry-After": "3"}  # type: ignore[attr-defined]
+    client = Sequenced([throttled, rows([[1, 24]])])
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
+
+    await service.execute(PARTITION, "MATCH (r:rooms) RETURN count(*) AS total")
+
+    assert waits == [3.0]
+    assert len([method for method, _, _ in client.requests if method == "POST"]) == 2
 
 
 @pytest.mark.asyncio
@@ -367,17 +455,6 @@ async def test_the_service_refuses_a_query_too_long_to_have_been_written_deliber
         await service.execute(PARTITION, runaway)
 
     assert client.requests == []
-
-
-@pytest.mark.asyncio
-async def test_the_service_refuses_to_pass_off_an_unreadable_definition_as_no_relationships() -> None:
-    refused = Response({"errorCode": "InsufficientPrivileges"}, status_code=403)
-    client = Client({"/executeQuery": refused, "/items": graph_items()})
-    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
-
-    # An empty summary and an unreadable one look identical to the model, so only one of them may be returned.
-    with pytest.raises(GraphQueryError):
-        await service.relationships(PARTITION)
 
 
 @pytest.mark.asyncio
@@ -423,3 +500,74 @@ async def test_the_service_says_how_many_graphs_it_could_see(visible: list[dict[
 
     # Seeing no graphs is a permission problem; seeing graphs that don't match is a naming problem.
     assert expected in str(failed.value)
+
+
+@pytest.mark.asyncio
+async def test_the_graph_identity_resolved_for_one_principal_is_not_reused_for_another() -> None:
+    client = Client({"/executeQuery": rows([[1, 24]]), "/items": graph_items()})
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client))
+    other = TaskPartition(
+        tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
+        owner_object_id=UUID("44444444-4444-4444-4444-444444444444"),
+        session_id="ses_interactive_87654321",
+    )
+
+    await service.execute(PARTITION, "MATCH (r:rooms) RETURN count(*) AS total")
+    await service.execute(other, "MATCH (r:rooms) RETURN count(*) AS total")
+
+    # Discovery listed the workspace with each principal's own delegated token; a
+    # remembered answer must not stand in for the second caller's permission check.
+    assert len([url for method, url, _ in client.requests if method == "GET"]) == 2
+
+
+def paused_capacity() -> Response:
+    return Response(
+        {
+            "errorCode": "CapacityNotActive",
+            "message": "Internal error CapacityNotActive.Capacity ca766f47-3e58-43df-9e2a-28f3cd87a6f8 is not active",
+        },
+        status_code=404,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_query_refused_for_a_paused_capacity_records_the_pause() -> None:
+    monitor = CapacityMonitor()
+    client = Client({"/executeQuery": paused_capacity(), "/items": graph_items()})
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client), capacity=monitor)
+
+    with pytest.raises(GraphQueryError):
+        await service.execute(PARTITION, "MATCH (r:rooms) RETURN count(*) AS total")
+
+    assert monitor.fresh() is CapacityState.PAUSED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "answer",
+    [rows([[1, 24]]), Response({"status": {"code": "42001", "message": "syntax error"}})],
+    ids=["rows", "rejected-query"],
+)
+async def test_any_answer_from_the_graph_engine_is_a_running_capacity(answer: Response) -> None:
+    monitor = CapacityMonitor()
+    monitor.record(CapacityState.PAUSED)
+    client = Client({"/executeQuery": answer, "/items": graph_items()})
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client), capacity=monitor)
+
+    with contextlib.suppress(GraphQueryError):
+        await service.execute(PARTITION, "MATCH (r:rooms) RETURN count(*) AS total")
+
+    assert monitor.fresh() is CapacityState.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_a_refused_token_says_nothing_about_the_capacity() -> None:
+    monitor = CapacityMonitor()
+    refused = Response({"errorCode": "InsufficientPrivileges", "message": "not authorized"}, status_code=403)
+    client = Client({"/executeQuery": refused, "/items": graph_items()})
+    service = FabricGraphQueryService(TARGET, token_provider=Token(), client_factory=factory(client), capacity=monitor)
+
+    with pytest.raises(GraphQueryError):
+        await service.execute(PARTITION, "MATCH (r:rooms) RETURN count(*) AS total")
+
+    assert monitor.fresh() is None

@@ -3,7 +3,6 @@ from fastapi import Request
 
 from eda_api.auth.msal_client import MsalAuthClient
 from eda_api.auth.repository import AuthRepository
-from eda_api.chat.service import InteractiveChatService
 from eda_api.config import Settings
 from eda_api.fabric_auth.service import FabricAuthCoordinator
 from eda_api.storage.artifacts import ArtifactCatalog
@@ -52,10 +51,6 @@ def runtime_repository(request: Request) -> RuntimeStateRepository:
 
 def task_service(request: Request) -> TaskService:
     return request.app.state.task_service
-
-
-def interactive_chat_service(request: Request) -> InteractiveChatService | None:
-    return request.app.state.interactive_chat_service
 
 
 def fabric_auth_service(request: Request) -> FabricAuthCoordinator | None:

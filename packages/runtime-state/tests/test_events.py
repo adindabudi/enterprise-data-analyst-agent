@@ -4,8 +4,9 @@ from collections.abc import Callable
 
 import fakeredis.aioredis
 import pytest
-from eda_runtime_state.events import DegradedEventBuffer, EventDraft, RedisEventStore
+from eda_runtime_state.events import MAX_BLOCK_MS, DegradedEventBuffer, EventDraft, RedisEventStore
 from redis.crc import key_slot
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 TASK_ID = "task_12345678"
 
@@ -90,6 +91,36 @@ async def test_recovery_reserves_explicit_omitted_interval(
     assert resumed.event.sequence == 5
     assert resumed.event.payload.omitted_from_sequence == 2
     assert resumed.event.payload.omitted_to_sequence == 4
+
+
+class TimingOutRedis:
+    """A client whose socket timeout expires before the stream has anything to return."""
+
+    def __init__(self) -> None:
+        self.blocks: list[int] = []
+
+    async def xread(self, streams: dict[str, str], *, count: int, block: int) -> object:
+        del streams, count
+        self.blocks.append(block)
+        raise RedisTimeoutError("Timeout reading from redis")
+
+
+@pytest.mark.asyncio
+async def test_a_quiet_stream_is_an_empty_read_rather_than_an_error() -> None:
+    redis = TimingOutRedis()
+    store = RedisEventStore(redis, ttl_seconds=3600, max_entries=10000)  # type: ignore[arg-type]
+
+    entries = await store.read_after(TASK_ID, None, block_ms=15000)
+
+    assert entries == []
+    # Blocking longer than the client's socket timeout is what turned quiet tasks into stream errors.
+    assert redis.blocks == [MAX_BLOCK_MS]
+    assert MAX_BLOCK_MS < 5_000
+
+
+@pytest.mark.asyncio
+async def test_a_short_block_is_left_as_requested(event_store: RedisEventStore) -> None:
+    assert await event_store.read_after(TASK_ID, None, block_ms=1) == []
 
 
 def test_degraded_buffer_never_exceeds_cap(draft_factory: Callable[[str], EventDraft]) -> None:

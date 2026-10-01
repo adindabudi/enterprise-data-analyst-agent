@@ -37,6 +37,57 @@ The doctor only reports hashes, counts, and pass/fail status. It validates disti
 
 After doctor succeeds, publish the contract, optionally run the same-tenant smoke, and run the cross-tenant acceptance gate. The smoke cannot promote readiness.
 
+## Publish the schema snapshot
+
+The analyst never discovers the ontology at run time. It writes GQL for the graph and KQL for time series from a schema snapshot pinned in its instructions, so a source without a published snapshot gets no query tools: the API logs `Fabric source queries are unavailable`, and the Fabric status reports `chatQuery: false`.
+
+```mermaid
+flowchart LR
+  job["Schema snapshot job<br/>(when the ontology changes)"] --> listing["Ontology MCP<br/>list_ontology_entity_types"]
+  job --> introspection["GQL introspection<br/>relationships + stored values"]
+  job --> record[("Runtime container<br/>fabric-schema-snapshot:alias")]
+  record -. "loaded at startup" .-> agent["Analyst runtime<br/>snapshot in instructions"]
+  user[User] --> agent
+  agent -- "query_graph (GQL)" --> graph["Graph<br/>executeQuery?beta=true"]
+  agent -- "query_timeseries (KQL)" --> kql["KQL database<br/>remote MCP executeQuery"]
+```
+
+Add the two items the tools read to the catalog entry in `FABRIC_ONTOLOGIES_JSON` (see `config/fabric-ontologies.example.json`):
+
+- `graphModelId`: the graph Fabric generated from the ontology. Without it, every reader needs `Workspace.Read.All` to find it.
+- `kqlDatabaseId`: the KQL database behind the ontology's time-series bindings. Without it the agent has no `query_timeseries` tool and says that time series cannot be read.
+
+Build the snapshot and review it. The ontology MCP accepts only a user token, so sign in as a person who can read the ontology and its graph:
+
+```sh
+az login
+uv run python scripts/build-fabric-schema-snapshot.py --catalog <catalog.json> \
+  --exclude-values patients.FirstName --exclude-values patients.LastName
+```
+
+The job prints the instructions exactly as the agent reads them, with their size, and writes `.artifacts/fabric-schema-snapshot.json`. On the Lamna lab it took 26 seconds and produced about 8 KB (2,000 tokens). When `kqlDatabaseId` is missing or does not match the time-series bindings, it names the KQL database they use.
+
+Before you publish, check what the snapshot shows:
+
+- Every user who links Fabric in this deployment sees the snapshot, including every listed value. Use `--exclude-values Entity.Property` for any property whose values must not be shown. Queries still run with each user's own token, so Fabric still decides what data each user gets back.
+- A string property is listed with its values only when it holds at most 30 (`--max-values`). Names, identifiers and free text are left unlisted, and the agent matches them exactly as the user wrote them.
+
+Publish the reviewed file, then restart the API revision so the runtime loads it:
+
+```sh
+uv run python scripts/build-fabric-schema-snapshot.py --input .artifacts/fabric-schema-snapshot.json --publish
+```
+
+Publishing writes `fabric-schema-snapshot:<alias>` to the runtime container with your Azure CLI identity, which needs Cosmos DB data-plane write access. Like the contract scripts, run it from inside the VNet when Cosmos DB public access is disabled.
+
+Run the job again whenever entity types, properties, relationships, time-series bindings or categorical values change. Each run reads the ontology definition, which Fabric meters, and wakes the graph if it is idle. Answering a question does neither.
+
+Notes:
+
+- The GQL Query API is beta (`beta=true`). A still-running query is followed through its continuation token for up to 120 seconds; a truncated response is flagged so no total is reported from it.
+- The KQL route was checked with an Azure CLI user token. Confirm that your Fabric app's delegated grant reaches the KQL database's MCP endpoint in the acceptance tenant before you rely on it.
+- The Fabric capacity status check still opens the ontology endpoint, without calling a tool, when a linked user opens the workspace and no recent reading exists. In the Fabric tool-path benchmark, an opened ontology session started the _Ontology Modeling_ meter window.
+
 ## Separate Indonesian Upstream Demo
 
 The upstream pack is an additive, fictional demonstration, not a replacement for

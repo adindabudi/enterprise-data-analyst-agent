@@ -15,6 +15,7 @@ dependencies = [
   "eda-fabric-auth",
   "eda-provenance",
   "eda-runtime-state",
+  "eda-worker",
   "fastapi==0.139.2",
   "httpx==0.28.1",
   "msal==1.37.0",

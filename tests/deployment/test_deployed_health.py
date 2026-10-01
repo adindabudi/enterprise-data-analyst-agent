@@ -18,8 +18,7 @@ REQUIRED_AZD_VALUES = (
     "API_APP_ID",
     "CLEANUP_JOB_ID",
     "CONTAINER_REGISTRY_LOGIN_SERVER",
-    "AGENT_LONG_JOB_RESPONSES_ENDPOINT",
-    "HOSTED_AGENT_PRINCIPAL_ID",
+    "WEB_IDENTITY_PRINCIPAL_ID",
     "EDA_SANDBOX_GROUP",
     "PROFILE",
 )
@@ -44,7 +43,8 @@ def test_deployment_tooling_requires_immutable_images_and_ordered_smoke_gates() 
         assert required_command in pin_script
     for required_gate in (
         "/health/ready",
-        "HOSTED_AGENT_PRINCIPAL_ID",
+        "analysis-runtime-readiness",
+        "WEB_IDENTITY_PRINCIPAL_ID",
         "scripts/test-entra-app.py",
         "scripts/verify-rbac.py",
         "deployed-storage-gate",
@@ -113,8 +113,10 @@ def test_deployed_health_and_resource_contracts() -> None:
         health: object = json.loads(response.read())
     assert isinstance(health, dict)
     health_text = json.dumps(health).lower()
-    for dependency in ("cosmos", "blob", "redis", "foundry", "hostedagent", "sandbox", "auth"):
+    for dependency in ("cosmos", "blob", "redis", "foundry", "analysisruntime", "sandbox", "auth"):
         assert dependency in health_text
+    assert cast(dict[str, dict[str, str]], health)["components"]["analysisRuntime"] == "ready"
+    assert "hostedagent" not in health_text
     for expected_status in ("core", "ready", "fabric", "disabled", "documents", "powerbi"):
         assert expected_status in health_text
 
@@ -141,9 +143,9 @@ def test_deployed_health_and_resource_contracts() -> None:
     assert api_image == image_values["api"]["image"]
     assert cleanup_image == image_values["worker"]["image"]
     assert all("@sha256:" in image for image in (api_image, cleanup_image))
-    assert environment["AGENT_LONG_JOB_RESPONSES_ENDPOINT"].startswith("https://")
-    assert environment["AGENT_LONG_JOB_RESPONSES_ENDPOINT"].endswith("/responses")
-    UUID(environment["HOSTED_AGENT_PRINCIPAL_ID"])
+    # The analyst runtime runs in the API: one always-on replica, with the API identity owning sandbox work.
+    assert api["properties"]["template"]["scale"]["minReplicas"] >= 1
+    UUID(environment["WEB_IDENTITY_PRINCIPAL_ID"])
     assert sandbox_group["id"].endswith(f"/sandboxGroups/{environment['EDA_SANDBOX_GROUP']}")
 
     ingress = api["properties"]["configuration"]["ingress"]

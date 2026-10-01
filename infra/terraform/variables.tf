@@ -67,7 +67,12 @@ variable "budget_alert_email" {
 
 variable "api_min_replicas" {
   type    = number
-  default = 0
+  default = 1
+
+  validation {
+    condition     = var.api_min_replicas >= 1
+    error_message = "api_min_replicas must be at least 1."
+  }
 }
 
 variable "api_max_replicas" {

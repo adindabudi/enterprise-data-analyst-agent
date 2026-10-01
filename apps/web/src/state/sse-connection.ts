@@ -18,6 +18,7 @@ const EVENT_TYPES: TaskStreamEvent["type"][] = [
   "attempt.superseded",
   "auth.required",
   "task.checkpointed",
+  "todo.updated",
   "artifact.ready",
   "run.completed",
   "run.failed",

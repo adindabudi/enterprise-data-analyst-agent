@@ -34,11 +34,16 @@ function deferred<Value>() {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.resetAllMocks();
   vi.mocked(createAnalysisSession).mockResolvedValue(sessionId);
   vi.mocked(uploadAnalysisInput).mockResolvedValue(selectedUpload);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
 
 describe("analysis upload lifecycle", () => {
   it("does not upload or restore a session after removal during session creation", async () => {
@@ -125,6 +130,74 @@ describe("analysis upload lifecycle", () => {
       expect(readUploadStatus).not.toHaveBeenCalled();
     },
   );
+
+  it("automatically polls a scanning upload until it is clean", async () => {
+    vi.mocked(readUploadStatus).mockResolvedValue({
+      ...selectedUpload,
+      state: "clean",
+    });
+    const { result } = renderHook(() =>
+      useAnalysisUpload(sessionId, "Analysis", vi.fn()),
+    );
+    await act(async () => {
+      await result.current.attach(file);
+    });
+
+    expect(result.current.inputUploadIds).toEqual([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(readUploadStatus).toHaveBeenCalledWith(
+      sessionId,
+      selectedUpload.uploadId,
+    );
+    expect(result.current.upload?.state).toBe("clean");
+    expect(result.current.inputUploadIds).toEqual([selectedUpload.uploadId]);
+  });
+
+  it("stops polling when a scanning upload is cleared", async () => {
+    const { result } = renderHook(() =>
+      useAnalysisUpload(sessionId, "Analysis", vi.fn()),
+    );
+    await act(async () => {
+      await result.current.attach(file);
+    });
+    act(() => {
+      result.current.clear();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(readUploadStatus).not.toHaveBeenCalled();
+    expect(result.current.upload).toBeUndefined();
+  });
+
+  it("keeps a rejected scan removable and unavailable for submission", async () => {
+    vi.mocked(readUploadStatus).mockResolvedValue({
+      ...selectedUpload,
+      state: "rejected",
+    });
+    const { result } = renderHook(() =>
+      useAnalysisUpload(sessionId, "Analysis", vi.fn()),
+    );
+    await act(async () => {
+      await result.current.attach(file);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(result.current.upload).toMatchObject({
+      state: "rejected",
+    });
+    expect(result.current.inputUploadIds).toEqual([]);
+    act(() => {
+      result.current.clear();
+    });
+    expect(result.current.upload).toBeUndefined();
+  });
 
   it("bounds refresh to one GET and preserves the identity for an explicit retry", async () => {
     const scan = deferred<AnalysisUpload>();

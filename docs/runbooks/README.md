@@ -19,13 +19,14 @@ Start here when something breaks or when you are about to change the deployment.
 
 ## Before you change the deployment
 
-| Task                              | Guide                                            |
-| --------------------------------- | ------------------------------------------------ |
-| Ship a release                    | [release-checklist.md](release-checklist.md)     |
-| Keep Bicep and Terraform aligned  | [terraform-parity.md](terraform-parity.md)       |
-| Enable Fabric semantic model      | [fabric-iq.md](fabric-iq.md)                     |
-| Enable Fabric ontology            | [fabric-ontology-lab.md](fabric-ontology-lab.md) |
-| Enable Office document generation | [document-pack.md](document-pack.md)             |
+| Task                                 | Guide                                                                        |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| Ship a release                       | [release-checklist.md](release-checklist.md)                                 |
+| Keep Bicep and Terraform aligned     | [terraform-parity.md](terraform-parity.md)                                   |
+| Enable Fabric semantic model         | [fabric-iq.md](fabric-iq.md)                                                 |
+| Enable Fabric ontology               | [fabric-ontology-lab.md](fabric-ontology-lab.md)                             |
+| Refresh the ontology schema snapshot | [fabric-ontology-lab.md](fabric-ontology-lab.md#publish-the-schema-snapshot) |
+| Enable Office document generation    | [document-pack.md](document-pack.md)                                         |
 
 ## Known issues
 
@@ -39,6 +40,9 @@ The API can report a linked Fabric grant before the selected provider contract h
 
 **Fabric stays `configured` and never reaches `ready`.**
 Readiness requires two distinct tenants. If your Fabric tenant ID equals your product tenant ID, the acceptance gate rejects it by design. A same-tenant setup is a smoke test only.
+
+**Fabric is linked, but the analyst has no tool to query the ontology.**
+The source's schema snapshot is missing, invalid, or describes a different source, so the API registers no query tools and logs `Fabric source queries are unavailable`. Build and publish the snapshot, then restart the API revision. See [fabric-ontology-lab.md](fabric-ontology-lab.md#publish-the-schema-snapshot).
 
 **Building images on an ARM machine produces something Container Apps will not run.**
 Apple Silicon and ARM WSL hosts build `linux/arm64` by default. Use the repository deployment hooks, which build with ACR remotely. Never push a locally built image straight to Container Apps or Hosted Agents.

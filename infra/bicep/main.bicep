@@ -12,7 +12,8 @@ param monthlyBudgetAmount int
 param monitoringAlertsEnabled bool = false
 param budgetActionGroupName string = ''
 param budgetAlertEmail string = ''
-param apiMinReplicas int = 0
+@minValue(1)
+param apiMinReplicas int = 1
 param apiMaxReplicas int = 1
 param redisSku string = 'Balanced_B0'
 param redisHighAvailabilityEnabled bool = false

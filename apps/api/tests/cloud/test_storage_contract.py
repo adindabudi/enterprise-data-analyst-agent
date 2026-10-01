@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pytest
 from azure.cosmos.aio import ContainerProxy, CosmosClient
-from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
+from azure.cosmos.exceptions import CosmosBatchOperationError, CosmosHttpResponseError, CosmosResourceNotFoundError
 from azure.identity.aio import AzureCliCredential
 from eda_api.auth.models import Principal
 from eda_api.storage.models import WorkspaceSession
@@ -91,7 +91,9 @@ async def test_workspace_container_enforces_hpk_owner_and_etag_contract() -> Non
                 batch_operations=batch_operations,
                 partition_key=CosmosWorkspaceRepository.partition(owner, batch_first_id),
             )
-        except CosmosHttpResponseError:
+        except (CosmosHttpResponseError, CosmosBatchOperationError):
+            # A rejected cross-partition batch surfaces as CosmosBatchOperationError,
+            # which derives from HttpResponseError rather than CosmosHttpResponseError.
             pass
         else:
             statuses: list[int] = []

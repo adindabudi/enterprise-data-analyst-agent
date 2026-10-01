@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -16,19 +17,23 @@ from eda_runtime_state.tasks import CosmosRuntimeStateRepository, RuntimeStateRe
 from fastapi import APIRouter, FastAPI, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from eda_api.analysis.client import RoutingTaskClient
+from eda_api.analysis.runtime import InProcessAnalysis, build_in_process_analysis
+from eda_api.analysis.source_context import SourceSnapshotContextProvider
+from eda_api.analysis.source_tools import SourceTools
 from eda_api.auth.msal_client import MsalAuthClient
 from eda_api.auth.repository import AuthRepository, CosmosAuthRepository
 from eda_api.auth.routes import router as auth_router
-from eda_api.chat.model import load_interactive_model_config
-from eda_api.chat.provenance import CosmosChatQueryStore
-from eda_api.chat.service import InteractiveChatService, MafInteractiveChatService
-from eda_api.chat.sessions import CosmosInteractiveSessionStore, RedisInteractiveSessionStore
 from eda_api.config import DEFAULT_FRONTEND_DIST, Settings
 from eda_api.fabric_auth import FabricAuthCoordinator, FabricAuthorizationCodeClient
+from eda_api.fabric_auth.capacity import CapacityMonitor, CapacityStatus
+from eda_api.fabric_auth.eventhouse import FabricEventhouseQueryService
 from eda_api.fabric_auth.graph import FabricGraphQueryService
 from eda_api.fabric_auth.msal_client import FabricAccessTokenClient
-from eda_api.fabric_auth.ontology import FabricOntologyQueryService
+from eda_api.fabric_auth.ontology import OntologyEndpointProbe
 from eda_api.fabric_auth.routes import router as fabric_auth_router
+from eda_api.fabric_auth.routes import source_router as fabric_source_router
+from eda_api.fabric_auth.snapshot import SnapshotUnavailableError, read_snapshot
 from eda_api.hosted_responses import HostedResponsesClient
 from eda_api.problems import install_problem_handlers
 from eda_api.readiness.models import (
@@ -39,7 +44,6 @@ from eda_api.readiness.models import (
     document_pack_status,
     fabric_pack_status,
 )
-from eda_api.routes.chat import router as chat_router
 from eda_api.routes.session_tasks import router as session_tasks_router
 from eda_api.routes.sessions import router as sessions_router
 from eda_api.routes.tasks import router as tasks_router
@@ -54,11 +58,7 @@ from eda_api.storage.workspace import CosmosWorkspaceRepository, WorkspaceReposi
 from eda_api.task_service import HostedTaskClient, TaskEventStore, TaskService
 from eda_api.telemetry import configure_logging, configure_telemetry
 
-# Matches the worker's hard ceiling so both paths bound a conversation the same way.
-INTERACTIVE_CONTEXT_WINDOW_TOKENS = 128_000
-INTERACTIVE_MAX_OUTPUT_TOKENS = 8_000
-INTERACTIVE_MAX_TOOL_ITERATIONS = 12
-INTERACTIVE_MAX_TOOL_CALLS = 24
+logger = logging.getLogger(__name__)
 
 
 class ClosableMsalClient(Protocol):
@@ -103,13 +103,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     fabric_auth_client = None
     fabric_access_token_client = None
     fabric_sync_credential = None
-    fabric_query = None
-    graph_query = None
-    interactive_client = None
-    interactive_credential = None
-    interactive_agent = None
-    interactive_model = None
-    interactive_web_search_tool = None
+    fabric_capacity: CapacityStatus | None = None
+    eventhouse_query: FabricEventhouseQueryService | None = None
+    source_wired = False
+    analysis: InProcessAnalysis | None = None
     try:
         config = app.state.settings_override or Settings.model_validate({})
         repository = app.state.auth_repository_override
@@ -216,7 +213,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             if used_managed_resources:
                 raise ValueError("message repository is unavailable")
             message_repository = InMemoryMessageRepository()
-        if hosted_client is None:
+        if hosted_client is None and (config.hosted_agent_enabled or not config.analysis_runtime_enabled):
             if credential is None:
                 from azure.identity.aio import DefaultAzureCredential
 
@@ -227,6 +224,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         managed_identity_client_id=str(config.managed_identity_client_id)
                     )
             hosted_client = HostedResponsesClient(config.hosted_responses_endpoint, credential)
+        # Source tools are assembled once the Fabric adapters exist; the runtime is built after that.
+        analysis_tools: list[Any] = []
+        analysis_context: list[Any] = []
+        task_client: HostedTaskClient | None = cast(HostedTaskClient | None, hosted_client)
+        if config.analysis_runtime_enabled:
+            if database is None:
+                raise ValueError("the analysis runtime requires the managed Cosmos database")
+            analysis = build_in_process_analysis(
+                config,
+                repository=runtime_repository,
+                runtime_container=database.get_container_client(config.cosmos_runtime_container),
+                events=cast(Any, event_store),
+                source_tools=lambda: analysis_tools,
+                source_context=lambda: analysis_context,
+            )
+            task_client = RoutingTaskClient(analysis.client, legacy=task_client)
+        if task_client is None:
+            raise ValueError("no task execution client is configured")
         msal = app.state.msal_override or MsalAuthClient(config)
         app.state.settings = config
         app.state.msal_client = msal
@@ -239,50 +254,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.runtime_repository = runtime_repository
         app.state.event_store = event_store
         app.state.message_repository = message_repository
-        app.state.hosted_client = hosted_client
+        app.state.hosted_client = task_client
+        app.state.analysis = analysis
         app.state.task_service = TaskService(
             cast(RuntimeStateRepository, runtime_repository),
             cast(MessageRepository, message_repository),
-            cast(HostedTaskClient, hosted_client),
+            task_client,
             cast(TaskEventStore | None, event_store),
             cast(QueryResultWriter | None, query_result_writer),
             uploads=cast(UploadService, uploads),
             input_artifact_writer=cast(InputArtifactWriter | None, input_artifact_writer),
         )
-        interactive_chat_service = app.state.interactive_chat_service_override
-        if interactive_chat_service is None and config.core_ready:
-            from agent_framework import ContextWindowCompactionStrategy
-            from agent_framework.foundry import FoundryChatClient
-            from azure.identity.aio import ManagedIdentityCredential
-
-            if config.managed_identity_client_id is None:
-                raise ValueError("interactive chat requires the API managed identity")
-            interactive_model = load_interactive_model_config(
-                contract_path=Path(config.model_contract_path),
-                prompt_path=Path(config.interactive_prompt_path),
-                expected_deployment=config.foundry_model_deployment,
-            )
-            interactive_credential = ManagedIdentityCredential(client_id=str(config.managed_identity_client_id))
-            interactive_client = FoundryChatClient(
-                project_endpoint=str(config.foundry_project_endpoint),
-                model=interactive_model.deployment,
-                credential=interactive_credential,
-            )
-            # One Fabric call costs about twenty seconds, so the framework default of 40 round
-            # trips would let a confused turn run for minutes before anyone could see why.
-            interactive_client.function_invocation_configuration["max_iterations"] = INTERACTIVE_MAX_TOOL_ITERATIONS
-            interactive_client.function_invocation_configuration["max_function_calls"] = INTERACTIVE_MAX_TOOL_CALLS
-            interactive_agent = interactive_client.as_agent(
-                name="enterprise-data-analyst-interactive",
-                instructions=interactive_model.instructions,
-                tools=(),
-                default_options=interactive_model.options,
-                compaction_strategy=ContextWindowCompactionStrategy(
-                    max_context_window_tokens=INTERACTIVE_CONTEXT_WINDOW_TOKENS,
-                    max_output_tokens=INTERACTIVE_MAX_OUTPUT_TOKENS,
-                ),
-            )
-            interactive_web_search_tool = FoundryChatClient.get_web_search_tool()
         fabric_readiness = app.state.fabric_readiness_override
         if fabric_readiness is None:
             fabric_feature: FabricFeatureState | None = None
@@ -389,56 +371,70 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         signing_certificate_name=config.fabric_signing_certificate_name,
                         credential=fabric_sync_credential,
                     )
-                    fabric_query = FabricOntologyQueryService(
-                        config.fabric_ontologies,
-                        token_provider=fabric_access_token_client,
+                    # A paused capacity is paused for every caller, so the reads and the status share one view of it.
+                    capacity_monitor = CapacityMonitor()
+                    source_alias, source_target = next(iter(config.fabric_ontologies.items()))
+                    fabric_capacity = CapacityStatus(
+                        capacity_monitor,
+                        tokens=fabric_access_token_client,
+                        source=OntologyEndpointProbe(source_target, capacity=capacity_monitor),
                     )
-                    graph_query = FabricGraphQueryService(
-                        next(iter(config.fabric_ontologies.values())),
-                        token_provider=fabric_access_token_client,
-                    )
+                    try:
+                        # Loaded at creation, as the agent's instructions: nothing discovers the schema at run time.
+                        source_snapshot = await read_snapshot(
+                            database_client.get_container_client(config.cosmos_runtime_container),
+                            source_alias,
+                            source_target,
+                        )
+                    except SnapshotUnavailableError as error:
+                        logger.warning("Fabric source queries are unavailable: %s", error)
+                    else:
+                        graph_query = FabricGraphQueryService(
+                            source_target, token_provider=fabric_access_token_client, capacity=capacity_monitor
+                        )
+                        if source_target.kql_database_id is not None:
+                            eventhouse_query = FabricEventhouseQueryService(
+                                source_target, token_provider=fabric_access_token_client, capacity=capacity_monitor
+                            )
+                        elif source_snapshot.has_time_series:
+                            logger.warning("the Fabric source binds time series but no kqlDatabaseId is configured")
+                        analysis_tools.extend(
+                            SourceTools(
+                                alias=source_alias,
+                                description=source_target.description,
+                                graph=graph_query,
+                                timeseries=eventhouse_query,
+                                tasks=cast(Any, runtime_repository),
+                                ledger=cast(Any, runtime_repository),
+                                writer=cast(Any, query_result_writer),
+                                events=cast(Any, event_store),
+                            ).tools()
+                        )
+                        analysis_context.append(
+                            SourceSnapshotContextProvider(
+                                snapshot=source_snapshot,
+                                description=source_target.description,
+                                timeseries=eventhouse_query is not None,
+                                tasks=cast(Any, runtime_repository),
+                                tokens=fabric_access_token_client,
+                            )
+                        )
+                        source_wired = True
             app.state.fabric_auth_service = fabric_auth_service
         else:
             app.state.fabric_auth_service = None
-        # Chat can query a configured same-tenant source long before acceptance promotes it to ready.
-        app.state.fabric_chat_query = fabric_query is not None
-        if interactive_chat_service is None and config.core_ready:
-            if interactive_agent is None or interactive_model is None:
-                raise ValueError("interactive chat model is unavailable")
-            interactive_chat_service = MafInteractiveChatService(
-                agent=interactive_agent,
-                messages=cast(MessageRepository, message_repository),
-                options=interactive_model.options,
-                analysis_starter=app.state.task_service,
-                fabric_query=fabric_query,
-                graph_query=graph_query,
-                web_search_tool=interactive_web_search_tool,
-                query_store=(
-                    CosmosChatQueryStore(database.get_container_client(config.cosmos_workspace_container))
-                    if database is not None
-                    else None
-                ),
-                session_store=(
-                    CosmosInteractiveSessionStore(
-                        database.get_container_client(config.cosmos_workspace_container),
-                        fallback=(
-                            RedisInteractiveSessionStore(redis_client, ttl_seconds=config.redis_stream_ttl_seconds)
-                            if redis_client is not None
-                            else None
-                        ),
-                    )
-                    if database is not None
-                    else None
-                ),
-            )
-        app.state.interactive_chat_service = interactive_chat_service
+        app.state.fabric_capacity = fabric_capacity
+        # Fabric can be queried from a configured same-tenant source long before acceptance promotes it to ready.
+        app.state.fabric_chat_query = source_wired
+        if analysis is not None:
+            await analysis.start()
         app.state.started = True
         yield
     finally:
-        if interactive_client is not None:
-            await interactive_client.project_client.close()
-        if interactive_credential is not None:
-            await interactive_credential.close()
+        if analysis is not None:
+            await analysis.close()
+        if eventhouse_query is not None:
+            await eventhouse_query.aclose()
         if fabric_auth_client is not None:
             fabric_auth_client.close()
         if fabric_access_token_client is not None:
@@ -475,7 +471,6 @@ def create_app(
     fabric_auth_service_override: FabricAuthCoordinator | None = None,
     fabric_readiness_override: FabricPackStatus | None = None,
     document_readiness_override: FabricPackStatus | None = None,
-    interactive_chat_service_override: InteractiveChatService | None = None,
     artifact_catalog_override: ArtifactCatalog | None = None,
     session_todo_reader_override: SessionTodoReader | None = None,
     query_result_writer_override: QueryResultWriter | None = None,
@@ -500,10 +495,18 @@ def create_app(
     app.state.fabric_auth_service_override = fabric_auth_service_override
     app.state.fabric_readiness_override = fabric_readiness_override
     app.state.document_readiness_override = document_readiness_override
-    app.state.interactive_chat_service_override = interactive_chat_service_override
-    app.state.interactive_chat_service = interactive_chat_service_override
+    app.state.analysis = None
 
     async def liveness() -> HealthStatus:
+        return HealthStatus(status="alive")
+
+    async def platform_readiness(response: Response) -> HealthStatus:
+        # The platform routes traffic only to a replica whose analyst runtime can take tasks, so a
+        # revision that cannot build it never replaces the one that can.
+        analysis: InProcessAnalysis | None = app.state.analysis
+        if analysis is not None and analysis.supervisor.readiness() != "ready":
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return HealthStatus(status=analysis.supervisor.readiness())
         return HealthStatus(status="alive")
 
     async def readiness(response: Response) -> ReadinessStatus:
@@ -511,9 +514,12 @@ def create_app(
         fabric_status: FabricPackStatus = app.state.fabric_readiness
         documents_status: FabricPackStatus = app.state.document_readiness
         powerbi_status: PowerBiProjectStatus = app.state.powerbi_readiness
+        analysis: InProcessAnalysis | None = app.state.analysis
         model_ready = active_settings.model_contract_verified and active_settings.tokenizer_calibrated
+        analysis_state = analysis.supervisor.readiness() if analysis is not None else "blocked"
         product_ready = (
             active_settings.core_ready
+            and analysis_state == "ready"
             and fabric_status is not FabricPackStatus.FAILED
             and documents_status is not FabricPackStatus.FAILED
         )
@@ -525,7 +531,7 @@ def create_app(
                 "blob": "configured",
                 "redis": "configured",
                 "foundry": "ready" if model_ready else "blocked",
-                "hostedAgent": "ready" if active_settings.hosted_agent_enabled else "blocked",
+                "analysisRuntime": analysis_state,
                 "sandbox": "ready" if active_settings.sandbox_image_digest is not None else "blocked",
                 "auth": "ready" if active_settings.entra_federation_ready else "blocked",
             },
@@ -544,7 +550,7 @@ def create_app(
     app.add_api_route("/health/live", liveness, methods=["GET"], response_model=HealthStatus, include_in_schema=False)
     app.add_api_route(
         "/health/platform-ready",
-        liveness,
+        platform_readiness,
         methods=["GET"],
         response_model=HealthStatus,
         include_in_schema=False,
@@ -555,9 +561,9 @@ def create_app(
     install_problem_handlers(app)
     app.include_router(auth_router)
     app.include_router(fabric_auth_router)
+    app.include_router(fabric_source_router)
     app.include_router(sessions_router)
     app.include_router(session_tasks_router)
-    app.include_router(chat_router)
     app.include_router(tasks_router)
     app.include_router(uploads_router)
     app.add_api_route(

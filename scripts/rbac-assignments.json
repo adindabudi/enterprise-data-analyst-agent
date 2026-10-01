@@ -11,9 +11,9 @@
       "scopeOutput": "storageAccountId"
     },
     {
-      "principalOutput": "hostedAgentPrincipalId",
-      "roleDefinitionId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
-      "scopeOutput": "storageAccountId"
+      "principalOutput": "webIdentityPrincipalId",
+      "roleDefinitionId": "c24cf47c-5077-412d-a19c-45202126392c",
+      "scopeOutput": "sandboxGroupId"
     }
   ],
   "cosmosSql": [
@@ -24,11 +24,6 @@
     },
     {
       "principalOutput": "workerIdentityPrincipalId",
-      "roleDefinitionId": "00000000-0000-0000-0000-000000000002",
-      "scope": "/"
-    },
-    {
-      "principalOutput": "hostedAgentPrincipalId",
       "roleDefinitionId": "00000000-0000-0000-0000-000000000002",
       "scope": "/"
     }
@@ -44,12 +39,6 @@
       "accessPolicyName": "default",
       "assignmentName": "worker",
       "principalOutput": "workerIdentityPrincipalId",
-      "scopeOutput": "redisClusterId"
-    },
-    {
-      "accessPolicyName": "default",
-      "assignmentNamePrefix": "hostedAgent",
-      "principalOutput": "hostedAgentPrincipalId",
       "scopeOutput": "redisClusterId"
     }
   ]

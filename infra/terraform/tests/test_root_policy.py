@@ -60,10 +60,14 @@ def test_root_main_keeps_terraform_as_parity_and_preserves_foundation_mode() -> 
     assert "worker_identity_principal_id" not in sandbox_module
     assert "provisioning_principal_id" in sandbox_module
     assert "= var.principal_id" in sandbox_module
+    assert "web_identity_principal_id" in sandbox_module
+    assert "= module.identities.web_identity_principal_id" in sandbox_module
 
     sandbox_source = (ROOT / "infra/terraform/modules/sandbox_group/main.tf").read_text(encoding="utf-8")
     assert 'resource "azurerm_role_assignment" "provisioning_sandbox_data_owner"' in sandbox_source
     assert "principal_id       = var.provisioning_principal_id" in sandbox_source
+    assert 'resource "azurerm_role_assignment" "web_sandbox_data_owner"' in sandbox_source
+    assert "principal_id       = var.web_identity_principal_id" in sandbox_source
     assert "c24cf47c-5077-412d-a19c-45202126392c" in sandbox_source
 
 

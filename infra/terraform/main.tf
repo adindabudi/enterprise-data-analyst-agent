@@ -232,6 +232,7 @@ module "sandbox_group" {
   session_init_identity_resource_id = module.identities.session_init_identity_id
   subscription_id                   = data.azurerm_client_config.current.subscription_id
   tags                              = local.tags
+  web_identity_principal_id         = module.identities.web_identity_principal_id
 }
 
 module "budgets_alerts" {

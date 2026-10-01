@@ -19,23 +19,22 @@ def load_script() -> ModuleType:
     return module
 
 
-def test_hosted_redis_assignment_name_is_bound_to_the_current_principal() -> None:
+def test_sandbox_data_owner_is_bound_to_the_api_principal() -> None:
     module = load_script()
     outputs = {
         "webIdentityPrincipalId": "11111111-1111-1111-1111-111111111111",
         "workerIdentityPrincipalId": "22222222-2222-2222-2222-222222222222",
-        "hostedAgentPrincipalId": "33333333-3333-3333-3333-333333333333",
         "storageAccountId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.Storage/storageAccounts/a",
+        "sandboxGroupId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.App/sandboxGroups/sbg",
         "cosmosAccountId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.DocumentDB/databaseAccounts/c",
         "redisClusterId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.Cache/redisEnterprise/cache",
     }
 
     expected = module.load_expected_assignments(EXPECTED, outputs)
-    hosted = next(
-        policy for policy in expected.redis_access_policies if policy.principal_id == outputs["hostedAgentPrincipalId"]
-    )
+    sandbox = next(assignment for assignment in expected.arm if assignment.scope == outputs["sandboxGroupId"].lower())
 
-    assert hosted.assignment_name == "hostedAgent-333333333333"
+    assert sandbox.principal_id == outputs["webIdentityPrincipalId"]
+    assert sandbox.role_definition_id == "c24cf47c-5077-412d-a19c-45202126392c"
 
 
 def test_scoped_arm_assignment_query_does_not_use_all() -> None:
@@ -43,16 +42,30 @@ def test_scoped_arm_assignment_query_does_not_use_all() -> None:
     calls: list[tuple[str, ...]] = []
     outputs = {
         "storageAccountId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.Storage/storageAccounts/a",
+        "sandboxGroupId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.App/sandboxGroups/sbg",
         "cosmosAccountId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.DocumentDB/databaseAccounts/c",
     }
+    assignment = module.Assignment(
+        "11111111-1111-1111-1111-111111111111",
+        outputs["storageAccountId"].lower(),
+        "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+    )
     expected = module.ExpectedAssignments(
-        arm=frozenset(),
+        arm=frozenset({assignment}),
         cosmos_sql=frozenset(),
         redis_access_policies=frozenset(),
     )
 
     def runner(command: list[str]) -> list[dict[str, object]]:
         calls.append(tuple(command))
+        if command[:3] == ["role", "assignment", "list"]:
+            return [
+                {
+                    "principalId": assignment.principal_id,
+                    "roleDefinitionId": assignment.role_definition_id,
+                    "scope": assignment.scope,
+                }
+            ]
         return []
 
     module.verify(outputs, expected, runner=runner)

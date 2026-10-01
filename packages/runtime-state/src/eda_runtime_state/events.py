@@ -9,9 +9,13 @@ from typing import Any, cast
 from eda_contracts import ActivityEvent
 from pydantic import TypeAdapter
 from redis.asyncio import Redis
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 ACTIVITY_EVENT: TypeAdapter[Any] = cast(TypeAdapter[Any], TypeAdapter(ActivityEvent))
 type RedisReadResponse = list[tuple[str, list[tuple[str, dict[str, str]]]]]
+# The client's socket timeout (5 s by default) also bounds a blocking read, so a longer block turns
+# a quiet stream into a read error. Blocking below it keeps a quiet stream quiet; callers loop.
+MAX_BLOCK_MS = 3_000
 
 APPEND_SCRIPT = """
 local sequence = redis.call('INCR', KEYS[2])
@@ -79,10 +83,11 @@ class StreamEntry:
 
 
 class RedisEventStore:
-    def __init__(self, redis: Redis, *, ttl_seconds: int, max_entries: int) -> None:
+    def __init__(self, redis: Redis, *, ttl_seconds: int, max_entries: int, max_block_ms: int = MAX_BLOCK_MS) -> None:
         self._redis = redis
         self._ttl_seconds = ttl_seconds
         self._max_entries = max_entries
+        self._max_block_ms = max(1, max_block_ms)
 
     async def append(self, draft: EventDraft) -> StreamEntry:
         body = _validated_body(draft)
@@ -130,7 +135,12 @@ class RedisEventStore:
         return StreamEntry(stream_id=stream_id, event=cast(ActivityEvent, ACTIVITY_EVENT.validate_python(body)))
 
     async def read_after(self, task_id: str, cursor: str | None, *, block_ms: int = 15000) -> list[StreamEntry]:
-        raw_response = await self._redis.xread({self._stream_key(task_id): cursor or "0-0"}, count=100, block=block_ms)
+        block = max(1, min(block_ms, self._max_block_ms))
+        try:
+            raw_response = await self._redis.xread({self._stream_key(task_id): cursor or "0-0"}, count=100, block=block)
+        except RedisTimeoutError:
+            # A blocking read that saw nothing in time is an empty read; the caller reads again.
+            return []
         response = cast(RedisReadResponse, raw_response)
         entries: list[StreamEntry] = []
         for _, raw_entries in response:

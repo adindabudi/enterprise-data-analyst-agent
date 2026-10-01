@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from azure.core.exceptions import HttpResponseError, ServiceRequestError, ServiceResponseError
+from eda_api.analysis.admission import AdmissionRejected
 from eda_api.auth.dependencies import CsrfPrincipalDep
 from eda_api.chat.service import conversation_context
 from eda_api.dependencies import task_service, workspace_repository
 from eda_api.problems import ApiError
-from eda_api.routes.chat import MAX_CONTEXT_CHARS, ChatHistoryMessage
 from eda_api.storage.uploads import UploadNotReady, UploadRejected
 from eda_api.storage.workspace import WorkspaceRepository
 from eda_api.task_service import InputPipelineUnavailable, SourceMessageNotFoundError, TaskService, TaskSummaryView
@@ -22,6 +22,15 @@ router = APIRouter(prefix="/api/sessions", tags=["tasks"])
 
 SessionIdPath = Annotated[str, Path(pattern=r"^ses_[A-Za-z0-9_-]{16,}$")]
 IdempotencyKeyHeader = Annotated[str, Header(alias="Idempotency-Key", pattern=r"^[!-~]{8,128}$")]
+MAX_CONTEXT_MESSAGE_CHARS = 4_000
+MAX_CONTEXT_CHARS = 12_000
+
+
+class ChatHistoryMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    role: Literal["user", "assistant"]
+    text: str = Field(min_length=1, max_length=MAX_CONTEXT_MESSAGE_CHARS)
 
 
 class AppendMessageRequest(BaseModel):
@@ -123,6 +132,12 @@ async def start_task(
         ) from error
     except RuntimeStateConflict as error:
         raise ApiError(status_code=409, title="Task request conflict", code="task_conflict") from error
+    except AdmissionRejected as error:
+        if error.reason == "runtime_unavailable":
+            raise ApiError(
+                status_code=503, title="Analysis runtime unavailable", code="analysis_runtime_unavailable"
+            ) from error
+        raise ApiError(status_code=429, title="Too many analysis requests", code=f"analysis_{error.reason}") from error
     except InputPipelineUnavailable as error:
         raise ApiError(status_code=503, title="Input storage unavailable", code="input_pipeline_unavailable") from error
     except (HttpResponseError, ServiceRequestError, ServiceResponseError, HTTPError, TimeoutError) as error:

@@ -23,6 +23,7 @@ it("loads canonical sessions, history and task identities with same-origin crede
         text: "Export results",
         createdAt: session.lastActivityAt,
         taskId: null,
+        steps: [],
       },
     ],
     tasks: [

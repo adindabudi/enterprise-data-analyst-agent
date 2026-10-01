@@ -95,13 +95,6 @@ export async function mockAnalysisApi(page: Page): Promise<void> {
       }),
     });
   });
-  await page.route("**/api/sessions/ses_e2e_12345678/chat", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: interactiveEventStream(),
-    });
-  });
   await page.route("**/api/tasks/task_e2e_12345678/cancel", async (route) => {
     await route.fulfill({
       status: 202,
@@ -130,22 +123,6 @@ export async function mockAnalysisApi(page: Page): Promise<void> {
       body: analysisEventStream(),
     });
   });
-}
-
-export function interactiveEventStream(): string {
-  return [
-    { type: "status", data: { message: "Agent is thinking" } },
-    { type: "delta", data: { text: "The answer is grounded and complete." } },
-    {
-      type: "completed",
-      data: { messageId: "msg_interactive_final_12345678" },
-    },
-  ]
-    .map(
-      (event) =>
-        `event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`,
-    )
-    .join("");
 }
 
 export function analysisEventStream(

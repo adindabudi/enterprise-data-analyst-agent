@@ -1,5 +1,6 @@
 import { withSessionHistory } from "../test/session-history";
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -29,17 +30,6 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 function requestUrl(input: RequestInfo | URL): string {
   return input instanceof Request ? input.url : String(input);
-}
-
-function eventResponse(events: Array<[string, object]>): Response {
-  return new Response(
-    events
-      .map(
-        ([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-      )
-      .join(""),
-    { headers: { "Content-Type": "text/event-stream" } },
-  );
 }
 
 const firstQuery = {
@@ -196,108 +186,151 @@ describe("canonical question provenance", () => {
     ).toBeVisible();
   });
 
-  it.each(["deep analysis", "interactive handoff"])(
-    "groups reads by the original question for %s and clears them on new chat",
-    async (mode) => {
-      const user = userEvent.setup();
-      document.cookie = "eda_csrf=csrf-value; Path=/";
-      let messageCount = 0;
-      vi.stubGlobal(
-        "fetch",
-        withSessionHistory(
-          vi.fn<typeof fetch>((input) => {
-            const path = requestUrl(input);
-            if (path === "/api/sessions")
-              return Promise.resolve(
-                jsonResponse({ sessionId: "ses_questions_12345678" }, 201),
-              );
-            if (path.endsWith("/messages")) {
-              messageCount += 1;
-              return Promise.resolve(
-                jsonResponse(
-                  {
-                    messageId:
-                      messageCount === 1
-                        ? firstQuery.messageId
-                        : secondQuery.messageId,
-                  },
-                  201,
-                ),
-              );
-            }
-            if (path.endsWith("/chat"))
-              return Promise.resolve(
-                messageCount === 1
-                  ? eventResponse([
-                      ["data_step", firstStep],
-                      ["delta", { text: "First answer." }],
-                      ["completed", { messageId: "msg_reply_first_12345678" }],
-                    ])
-                  : eventResponse([
-                      [
-                        "analysis_started",
-                        { taskId: "task_questions_12345678" },
-                      ],
-                    ]),
-              );
-            if (path.endsWith("/tasks"))
-              return Promise.resolve(
-                jsonResponse({ taskId: "task_questions_12345678" }, 202),
-              );
-            if (path.endsWith("/provenance"))
-              return Promise.resolve(
-                jsonResponse({
-                  sourceQueries: [firstQuery, secondQuery],
-                  artifacts: [],
-                }),
-              );
-            if (path.endsWith("/artifacts"))
-              return Promise.resolve(jsonResponse({ artifacts: [] }));
-            return Promise.reject(new Error(`Unexpected request: ${path}`));
+  it("groups task provenance by the original question after runs complete and clears it on new chat", async () => {
+    class EventSourceFixture {
+      static current: EventSourceFixture | undefined;
+      readonly listeners = new Map<string, EventListener>();
+
+      constructor(readonly url: string) {
+        EventSourceFixture.current = this;
+      }
+
+      addEventListener(type: string, listener: EventListener): void {
+        this.listeners.set(type, listener);
+      }
+
+      close(): void {}
+
+      emit(type: string, value: object): void {
+        this.listeners.get(type)?.(
+          new MessageEvent(type, {
+            data: JSON.stringify(value),
+            lastEventId: "1700000000000-0",
           }),
-        ),
-      );
-      render(<DesktopWorkspace />);
-      const composer = screen.getByRole("textbox", {
-        name: "Analysis request",
-      });
-      await user.type(composer, "How many rooms?");
-      await user.click(screen.getByRole("button", { name: "Send message" }));
-      expect(await screen.findByText("First answer.")).toBeVisible();
-      if (mode === "deep analysis") {
-        await user.click(screen.getByRole("button", { name: "Add context" }));
-        await user.click(
-          screen.getByRole("menuitem", { name: "Deep analysis" }),
         );
       }
-      await user.type(composer, "How many patients?");
-      await user.click(screen.getByRole("button", { name: "Send message" }));
-      await waitFor(() => {
-        expect(window.location.search).toContain("task_questions_12345678");
-      });
-      await user.click(screen.getByRole("button", { name: "Provenance" }));
-      const secondGroup = await screen.findByRole("group", {
-        name: "How many patients?",
-      });
-      const firstGroup = screen.getByRole("group", { name: "How many rooms?" });
-      expect(within(firstGroup).getAllByText(firstQuery.query)).toHaveLength(1);
-      expect(
-        within(firstGroup).queryByText(secondQuery.query),
-      ).not.toBeInTheDocument();
-      expect(within(secondGroup).getByText(secondQuery.query)).toBeVisible();
-      expect(
-        screen.queryByRole("group", { name: /Question msg_/ }),
-      ).not.toBeInTheDocument();
+    }
+    Object.defineProperty(globalThis, "EventSource", {
+      configurable: true,
+      value: EventSourceFixture,
+      writable: true,
+    });
+    const user = userEvent.setup();
+    document.cookie = "eda_csrf=csrf-value; Path=/";
+    let messageCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      withSessionHistory(
+        vi.fn<typeof fetch>((input) => {
+          const path = requestUrl(input);
+          if (path === "/api/sessions")
+            return Promise.resolve(
+              jsonResponse({ sessionId: "ses_questions_12345678" }, 201),
+            );
+          if (path.endsWith("/messages")) {
+            messageCount += 1;
+            const messageId =
+              messageCount === 1 ? firstQuery.messageId : secondQuery.messageId;
+            return Promise.resolve(jsonResponse({ messageId }, 201));
+          }
+          if (path.endsWith("/tasks"))
+            return Promise.resolve(
+              jsonResponse(
+                {
+                  taskId:
+                    messageCount === 1
+                      ? "task_questions_12345678"
+                      : "task_questions_87654321",
+                },
+                202,
+              ),
+            );
+          if (path.endsWith("/provenance"))
+            return Promise.resolve(
+              jsonResponse({
+                sourceQueries: path.includes("task_questions_12345678")
+                  ? [firstQuery]
+                  : [secondQuery],
+                artifacts: [],
+              }),
+            );
+          if (path.endsWith("/artifacts"))
+            return Promise.resolve(jsonResponse({ artifacts: [] }));
+          if (path.includes("/messages/msg_reply_"))
+            return Promise.resolve(
+              jsonResponse({
+                messageId: path.includes("first")
+                  ? "msg_reply_first_12345678"
+                  : "msg_reply_second_12345678",
+                role: "assistant",
+                text: path.includes("first")
+                  ? "First answer."
+                  : "Second answer.",
+              }),
+            );
+          return Promise.reject(new Error(`Unexpected request: ${path}`));
+        }),
+      ),
+    );
+    render(<DesktopWorkspace />);
+    const composer = screen.getByRole("textbox", { name: "Analysis request" });
 
-      const newChat = screen.getAllByRole("button", { name: "New chat" })[0];
-      if (!newChat) throw new Error("New chat control is unavailable");
-      await user.click(newChat);
-      await user.click(screen.getByRole("button", { name: "Provenance" }));
-      expect(screen.getByText("No queries yet.")).toBeVisible();
-      expect(screen.queryByText(firstQuery.query)).not.toBeInTheDocument();
-      expect(screen.queryByText(secondQuery.query)).not.toBeInTheDocument();
-    },
-  );
+    await user.type(composer, "How many rooms?");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(EventSourceFixture.current).toBeDefined();
+    });
+    act(() => {
+      EventSourceFixture.current?.emit("run.completed", {
+        eventId: "evt_first_12345678",
+        sequence: 1,
+        sessionId: "ses_questions_12345678",
+        taskId: "task_questions_12345678",
+        occurredAt: "2026-09-06T01:00:00Z",
+        type: "run.completed",
+        payload: {
+          status: "completed",
+          finalMessageId: "msg_reply_first_12345678",
+        },
+        provenanceRefs: [],
+      });
+    });
+    expect(await screen.findByText("Analysis completed")).toBeVisible();
+
+    await user.type(composer, "How many patients?");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Send message" }),
+      ).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(window.location.search).toContain("task_questions_87654321");
+    });
+    await user.click(screen.getByRole("button", { name: "Provenance" }));
+    const secondGroup = await screen.findByRole("group", {
+      name: "How many patients?",
+    });
+    const firstGroup = screen.getByRole("group", { name: "How many rooms?" });
+    expect(within(firstGroup).getByText(firstQuery.query)).toBeVisible();
+    expect(
+      within(firstGroup).queryByText(secondQuery.query),
+    ).not.toBeInTheDocument();
+    expect(within(secondGroup).getByText(secondQuery.query)).toBeVisible();
+
+    const newChat = screen.getAllByRole("button", { name: "New chat" })[0];
+    if (!newChat) throw new Error("New chat control is unavailable");
+    await user.click(newChat);
+    await user.click(screen.getByRole("button", { name: "Provenance" }));
+    expect(screen.getByText("No queries yet.")).toBeVisible();
+    expect(screen.queryByText(firstQuery.query)).not.toBeInTheDocument();
+    expect(screen.queryByText(secondQuery.query)).not.toBeInTheDocument();
+  });
 
   it("labels missing question text on resume without inventing it", async () => {
     const user = userEvent.setup();
@@ -328,67 +361,41 @@ describe("canonical question provenance", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("retains failed attempts under their question after a later turn", async () => {
-    const user = userEvent.setup();
-    document.cookie = "eda_csrf=csrf-value; Path=/";
-    let messageCount = 0;
-    vi.stubGlobal(
-      "fetch",
-      withSessionHistory(
-        vi.fn<typeof fetch>((input) => {
-          const path = requestUrl(input);
-          if (path === "/api/sessions")
-            return Promise.resolve(
-              jsonResponse({ sessionId: "ses_questions_12345678" }, 201),
-            );
-          if (path.endsWith("/messages")) {
-            messageCount += 1;
-            return Promise.resolve(
-              jsonResponse(
-                {
-                  messageId:
-                    messageCount === 1
-                      ? firstQuery.messageId
-                      : secondQuery.messageId,
-                },
-                201,
-              ),
-            );
-          }
-          if (path.endsWith("/chat"))
-            return Promise.resolve(
-              messageCount === 1
-                ? eventResponse([
-                    [
-                      "data_step",
-                      {
-                        ...firstStep,
-                        state: "failed",
-                        detail: "Query rejected",
-                      },
-                    ],
-                    ["failed", { message: "Unable to answer" }],
-                  ])
-                : eventResponse([
-                    ["delta", { text: "Second answer." }],
-                    ["completed", { messageId: "msg_reply_second_12345678" }],
-                  ]),
-            );
-          return Promise.reject(new Error(`Unexpected request: ${path}`));
-        }),
-      ),
-    );
-    render(<DesktopWorkspace />);
-    const composer = screen.getByRole("textbox", { name: "Analysis request" });
-    await user.type(composer, "How many rooms?");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => {
-      expect(screen.getAllByText("Unable to answer").length).toBeGreaterThan(0);
+  it("retains failed attempts under their question after a later turn", () => {
+    const failedStep = readDataStep({
+      ...firstStep,
+      state: "failed",
+      detail: "Query rejected",
     });
-    await user.type(composer, "Another question");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText("Second answer.")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Provenance" }));
+    if (!failedStep) throw new Error("Test query step is invalid");
+
+    render(
+      <QueryProvenance
+        messages={[
+          {
+            id: firstQuery.messageId,
+            role: "user",
+            text: "How many rooms?",
+            steps: [failedStep],
+          },
+          {
+            id: secondQuery.messageId,
+            role: "user",
+            text: "Another question",
+          },
+          {
+            id: "msg_reply_second_12345678",
+            role: "assistant",
+            text: "Second answer.",
+          },
+        ]}
+        liveSteps={[]}
+        queries={[]}
+        artifacts={[]}
+        taskId={null}
+      />,
+    );
+
     const group = screen.getByRole("group", { name: "How many rooms?" });
     expect(within(group).getByText("Failed query")).toBeVisible();
     expect(within(group).getByText(firstQuery.query)).toBeVisible();

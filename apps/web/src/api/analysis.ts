@@ -7,6 +7,11 @@ export type AnalysisIdentity = {
   taskId: string;
 };
 
+type SessionMessageIdentity = {
+  sessionId: string;
+  messageId: string;
+};
+
 export type FinalAnalysisMessage = {
   messageId: string;
   role: "assistant";
@@ -16,22 +21,6 @@ export type FinalAnalysisMessage = {
 export type ChatHistoryMessage = {
   role: "user" | "assistant";
   text: string;
-};
-
-export type InteractiveChatUpdate = {
-  event:
-    | "status"
-    | "delta"
-    | "data_step"
-    | "analysis_started"
-    | "completed"
-    | "failed";
-  data: Record<string, string>;
-};
-
-export type InteractiveChatIdentity = {
-  sessionId: string;
-  messageId: string;
 };
 
 export type PublishedArtifact = {
@@ -312,57 +301,6 @@ export async function createAnalysis(
   return { sessionId, messageId, taskId };
 }
 
-export async function streamInteractiveChat(
-  title: string,
-  text: string,
-  history: ChatHistoryMessage[],
-  requestId: string,
-  signal: AbortSignal,
-  onUpdate: (update: InteractiveChatUpdate) => void,
-  activeSessionId?: string,
-): Promise<InteractiveChatIdentity> {
-  const recentHistory = compactChatHistory(history);
-  validateIdempotency(requestId);
-  const identity = await createSessionMessage(
-    title,
-    text,
-    requestId,
-    activeSessionId,
-  );
-  const response = await fetch(
-    `/api/sessions/${encodeURIComponent(identity.sessionId)}/chat`,
-    {
-      method: "POST",
-      credentials: "same-origin",
-      headers: writeHeaders(`${requestId}-chat`),
-      body: JSON.stringify({
-        messageId: identity.messageId,
-        history: recentHistory,
-      }),
-      signal,
-    },
-  );
-  if (!response.ok || response.body === null)
-    throw new Error("Interactive chat request failed");
-  const streamState: { terminalEventReceived: boolean } = {
-    terminalEventReceived: false,
-  };
-  await readEventStream(response.body, (update) => {
-    if (
-      update.event === "completed" ||
-      update.event === "analysis_started" ||
-      update.event === "failed"
-    ) {
-      streamState.terminalEventReceived = true;
-    }
-    onUpdate(update);
-  });
-  if (!streamState.terminalEventReceived) {
-    throw new Error("Interactive chat stream ended without a terminal event");
-  }
-  return identity;
-}
-
 function compactChatHistory(
   history: ChatHistoryMessage[],
 ): ChatHistoryMessage[] {
@@ -639,9 +577,21 @@ export async function listSessionTodos(
   });
 }
 
+export class AnalysisRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "AnalysisRequestError";
+  }
+}
+
 async function requestJson(path: string, init: RequestInit): Promise<unknown> {
   const response = await fetch(path, { credentials: "same-origin", ...init });
-  if (!response.ok) throw new Error("Analysis request failed");
+  if (!response.ok) {
+    throw new AnalysisRequestError("Analysis request failed", response.status);
+  }
   return response.json();
 }
 
@@ -650,7 +600,7 @@ async function createSessionMessage(
   text: string,
   requestId: string,
   activeSessionId?: string,
-): Promise<InteractiveChatIdentity> {
+): Promise<SessionMessageIdentity> {
   validateMessageInput(title, text);
   let sessionId = activeSessionId;
   if (sessionId === undefined) {
@@ -686,64 +636,6 @@ function validateMessageInput(title: string, text: string): void {
   ) {
     throw new Error("Analysis request is invalid");
   }
-}
-
-async function readEventStream(
-  body: ReadableStream<Uint8Array>,
-  onUpdate: (update: InteractiveChatUpdate) => void,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let done = false;
-  while (!done) {
-    const result = await reader.read();
-    done = result.done;
-    buffer += decoder
-      .decode(result.value, { stream: !done })
-      .replaceAll("\r\n", "\n");
-    let boundary = buffer.indexOf("\n\n");
-    while (boundary >= 0) {
-      parseEvent(buffer.slice(0, boundary), onUpdate);
-      buffer = buffer.slice(boundary + 2);
-      boundary = buffer.indexOf("\n\n");
-    }
-  }
-  if (buffer.trim()) parseEvent(buffer, onUpdate);
-}
-
-function parseEvent(
-  block: string,
-  onUpdate: (update: InteractiveChatUpdate) => void,
-): void {
-  let eventName = "";
-  const dataLines: string[] = [];
-  for (const line of block.split("\n")) {
-    if (line.startsWith("event:")) eventName = line.slice(6).trim();
-    if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
-  }
-  if (!isInteractiveEvent(eventName) || dataLines.length === 0) return;
-  const parsed: unknown = JSON.parse(dataLines.join("\n"));
-  if (
-    !isRecord(parsed) ||
-    Object.values(parsed).some((value) => typeof value !== "string")
-  ) {
-    throw new Error("Interactive chat event is invalid");
-  }
-  onUpdate({ event: eventName, data: parsed as Record<string, string> });
-}
-
-function isInteractiveEvent(
-  value: string,
-): value is InteractiveChatUpdate["event"] {
-  return (
-    value === "status" ||
-    value === "delta" ||
-    value === "data_step" ||
-    value === "analysis_started" ||
-    value === "completed" ||
-    value === "failed"
-  );
 }
 
 function writeHeaders(idempotencyKey?: string): HeadersInit {

@@ -126,6 +126,11 @@ case "$worker_image" in
     *) fail "prebuilt worker image must be an immutable image from ${registry_login_server}" ;;
 esac
 worker_digest="${worker_image##*@}"
+sandbox_subscription_id="$(azd_value EDA_SANDBOX_SUBSCRIPTION_ID)"
+sandbox_resource_group="$(azd_value EDA_SANDBOX_RESOURCE_GROUP)"
+sandbox_group="$(azd_value EDA_SANDBOX_GROUP)"
+sandbox_region="$(azd_value EDA_SANDBOX_REGION)"
+sandbox_disk_image_id="$(azd_value EDA_SANDBOX_DISK_IMAGE_ID)"
 
 az containerapp job update --name "$cleanup_name" --resource-group "$resource_group" --image "$worker_image" --only-show-errors >/dev/null \
     || fail "unable to pin cleanup job image"
@@ -137,6 +142,12 @@ az containerapp update --name "$api_name" --resource-group "$resource_group" \
     --image "$api_image" \
     --set-env-vars \
     EDA_WORKER_IMAGE_DIGEST="$worker_digest" \
+    EDA_SANDBOX_SUBSCRIPTION_ID="$sandbox_subscription_id" \
+    EDA_SANDBOX_RESOURCE_GROUP="$sandbox_resource_group" \
+    EDA_SANDBOX_GROUP="$sandbox_group" \
+    EDA_SANDBOX_REGION="$sandbox_region" \
+    EDA_SANDBOX_DISK_IMAGE_ID="$sandbox_disk_image_id" \
+    EDA_ANALYSIS_RUNTIME_ENABLED=true \
     EDA_MODEL_CONTRACT_VERIFIED=true \
     EDA_TOKENIZER_CALIBRATED=true \
     EDA_HOSTED_AGENT_ENABLED=true \
@@ -175,6 +186,12 @@ verify_api_environment() {
 }
 
 verify_api_environment 'EDA_WORKER_IMAGE_DIGEST' "$worker_digest"
+verify_api_environment 'EDA_SANDBOX_SUBSCRIPTION_ID' "$sandbox_subscription_id"
+verify_api_environment 'EDA_SANDBOX_RESOURCE_GROUP' "$sandbox_resource_group"
+verify_api_environment 'EDA_SANDBOX_GROUP' "$sandbox_group"
+verify_api_environment 'EDA_SANDBOX_REGION' "$sandbox_region"
+verify_api_environment 'EDA_SANDBOX_DISK_IMAGE_ID' "$sandbox_disk_image_id"
+verify_api_environment 'EDA_ANALYSIS_RUNTIME_ENABLED' 'true'
 verify_api_environment 'EDA_MODEL_CONTRACT_VERIFIED' 'true'
 verify_api_environment 'EDA_TOKENIZER_CALIBRATED' 'true'
 verify_api_environment 'EDA_HOSTED_AGENT_ENABLED' 'true'

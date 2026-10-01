@@ -31,13 +31,13 @@ def test_sandbox_group_is_scale_to_zero_and_vnet_integrated() -> None:
     assert "sessionPools" not in module
 
 
-def test_demo_profile_scales_compute_to_zero() -> None:
+def test_api_keeps_at_least_one_replica() -> None:
     main = read(MAIN)
     demo = read(DEMO_PARAMETERS)
     production = read(PRODUCTION_PARAMETERS)
 
-    assert "param apiMinReplicas int = 0" in main
-    assert "param apiMinReplicas = 0" in demo
+    assert "@minValue(1)\nparam apiMinReplicas int = 1" in main
+    assert "param apiMinReplicas = 1" in demo
     assert "param apiMinReplicas = 3" in production
     assert "workerMinReplicas" not in main
     assert "workerMinReplicas" not in demo
@@ -56,18 +56,21 @@ def test_subscription_topology_declares_the_sandbox_group_post_provision() -> No
     assert "Microsoft.App/sandboxGroups" in main
 
 
-def test_sandbox_group_defers_data_owner_to_the_hosted_agent_binder() -> None:
+def test_sandbox_group_grants_api_identity_data_owner() -> None:
     module = read(MODULE)
-    binder = read(ROOT / "scripts/bind-hosted-agent-rbac.py")
     deploy = read(DEPLOY_SCRIPT)
 
     assert "workerIdentityPrincipalId" not in module
     assert "param provisioningPrincipalId string" in module
+    assert "param webIdentityPrincipalId string" in module
     assert "principalId: provisioningPrincipalId" in module
+    assert "principalId: webIdentityPrincipalId" in module
     assert "Microsoft.Authorization/roleAssignments" in module
-    assert "c24cf47c-5077-412d-a19c-45202126392c" in binder
     assert "c24cf47c-5077-412d-a19c-45202126392c" in module
     assert 'provisioningPrincipalId="$provisioning_principal_id"' in deploy
+    assert 'webIdentityPrincipalId="$web_identity_principal_id"' in deploy
+    assert "az role assignment create" in deploy
+    assert "API sandbox data-owner assignment is missing" in deploy
     assert "Contributor" not in module
     assert "'Owner'" not in module
 

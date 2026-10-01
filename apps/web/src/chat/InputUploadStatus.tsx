@@ -6,7 +6,7 @@ import type { InputUpload } from "./useAnalysisUpload";
 const labels: Record<InputUpload["state"], string> = {
   pending: "Pending upload",
   uploading: "Uploading",
-  scanning: "Scanning",
+  scanning: "Checking the file for malware…",
   clean: "Clean",
   rejected: "Rejected",
   scan_failed: "Scan failed",

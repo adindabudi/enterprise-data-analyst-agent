@@ -18,6 +18,7 @@ from eda_runtime_state.tasks import RuntimeStateConflict, RuntimeStateRepository
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from eda_api.analysis.admission import AdmissionRejected
 from eda_api.auth.models import Principal
 from eda_api.chat.service import QueryRun
 from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
@@ -332,7 +333,7 @@ class TaskService:
                 created.id,
                 user_identity=self._hosted_user_identity(created),
             )
-        except (ServiceRequestError, httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout):
+        except (ServiceRequestError, httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout, AdmissionRejected):
             await self.repository.release_initial_dispatch(created.id)
             raise
         try:

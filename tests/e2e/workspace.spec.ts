@@ -41,7 +41,7 @@ test("private chat streams progress and commits the canonical response", async (
   await expect(
     page.getByText("The answer is grounded and complete."),
   ).toBeVisible();
-  expect(durableTaskRequests).toBe(0);
+  expect(durableTaskRequests).toBe(1);
   await expectNoBrowserSecrets(page);
 });
 
@@ -77,8 +77,6 @@ test("cancellation is queued while the agent is running", async ({
     });
   });
 
-  await page.getByRole("button", { name: "Add context" }).click();
-  await page.getByRole("menuitem", { name: "Deep analysis" }).click();
   await page.getByLabel("Analysis request").fill("Run a long analysis");
   await page.getByRole("button", { name: "Send message" }).click();
   await page.getByRole("button", { name: "Stop current task" }).click();
@@ -107,24 +105,6 @@ for (const status of ["completed", "failed", "cancelled"] as const) {
     page.on("pageerror", (error) => errors.push(error.message));
     await openAuthenticatedWorkspace(page, testInfo);
     const question = "Export room occupancy to XLSX only.";
-    const step = {
-      stepId: "step-occupancy",
-      kind: "gql",
-      label: "Read room occupancy",
-      state: "completed",
-      query: "MATCH (room:rooms) RETURN room.RoomType, count(room)",
-      source: "lamna-healthcare",
-      querySha256: "a".repeat(64),
-      rowCount: "5",
-    };
-    await page.route("**/api/sessions/ses_e2e_12345678/chat", async (route) => {
-      await route.fulfill({
-        contentType: "text/event-stream",
-        body:
-          `event: data_step\ndata: ${JSON.stringify(step)}\n\n` +
-          'event: analysis_started\ndata: {"taskId":"task_e2e_12345678"}\n\n',
-      });
-    });
     await page.route(
       "**/api/tasks/task_e2e_12345678/artifacts",
       async (route) => {
@@ -187,18 +167,6 @@ for (const status of ["completed", "failed", "cancelled"] as const) {
     await expect(
       conversation.getByRole("progressbar", { name: "Reading the source" }),
     ).toHaveCount(0);
-    if (!isMobileProject(testInfo)) {
-      const dataSteps = conversation.getByRole("region", {
-        name: "Data steps",
-      });
-      await expect(dataSteps.locator("xpath=ancestor::article")).toContainText(
-        question,
-      );
-      await dataSteps.getByRole("button", { name: /Analyzed/ }).click();
-      await dataSteps.getByRole("button", { name: step.label }).click();
-      await expect(dataSteps.getByText(step.query)).toBeVisible();
-    }
-
     finishRun();
 
     await expect(stop).toBeDisabled();
@@ -221,12 +189,11 @@ for (const status of ["completed", "failed", "cancelled"] as const) {
         ).toHaveCount(1);
       }
     }
-    if (!isMobileProject(testInfo)) {
-      await expect(conversation.getByText(step.query)).toBeVisible();
-    }
     expect(errors).toEqual([]);
     await page.screenshot({
-      path: `/tmp/eda-xlsx-${testInfo.project.name}-${status}.png`,
+      path: testInfo.outputPath(
+        `eda-xlsx-${testInfo.project.name}-${status}.png`,
+      ),
       fullPage: true,
     });
   });

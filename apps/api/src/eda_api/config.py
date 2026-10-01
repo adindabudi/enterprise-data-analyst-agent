@@ -57,7 +57,15 @@ class Settings(BaseSettings):
     sandbox_image_digest: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
     model_contract_verified: bool = False
     tokenizer_calibrated: bool = False
+    # Only drains tasks the hosted agent already owns; no new task is sent to it.
     hosted_agent_enabled: bool = False
+    analysis_runtime_enabled: bool = False
+    analysis_max_active_per_replica: int = Field(default=2, ge=1, le=8)
+    analysis_deployment_limit: int = Field(default=5, ge=1, le=64)
+    analysis_queue_depth: int = Field(default=50, ge=1, le=500)
+    analysis_per_owner_limit: int = Field(default=10, ge=1, le=100)
+    analysis_task_budget_minutes: int = Field(default=60, ge=5, le=240)
+    analysis_streaming_enabled: bool = True
     entra_federation_ready: bool = False
     core_ready: bool = False
     documents_enabled: bool = Field(
@@ -166,10 +174,12 @@ class Settings(BaseSettings):
         if self.core_ready and (
             not self.model_contract_verified
             or not self.tokenizer_calibrated
-            or not self.hosted_agent_enabled
+            or not self.analysis_runtime_enabled
             or not self.entra_federation_ready
         ):
             raise ValueError("core_ready requires every execution and federation gate")
+        if self.analysis_deployment_limit < self.analysis_max_active_per_replica:
+            raise ValueError("analysis deployment limit must cover one replica's concurrency")
         return self
 
     @cached_property

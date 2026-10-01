@@ -10,11 +10,7 @@ import type {
   PublishedArtifact,
   SourceQuery,
 } from "../../apps/web/src/api/analysis";
-import {
-  interactiveEventStream,
-  isMobileProject,
-  openAuthenticatedWorkspace,
-} from "./fixtures";
+import { isMobileProject, openAuthenticatedWorkspace } from "./fixtures";
 
 test.beforeEach(async ({ baseURL, context }) => {
   expect(
@@ -118,14 +114,6 @@ async function mockTaskDetails(
   });
 }
 
-function eventStream(events: Array<[string, object]>): string {
-  return events
-    .map(
-      ([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-    )
-    .join("");
-}
-
 async function expectContained(locator: Locator): Promise<void> {
   const metrics = await locator.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
@@ -161,12 +149,13 @@ async function expectContained(locator: Locator): Promise<void> {
 
 async function captureDesktop(page: Page, testInfo: TestInfo): Promise<void> {
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
-  const path =
+  const path = testInfo.outputPath(
     testInfo.project.name === "minimum-desktop"
-      ? "/tmp/eda-details-minimum.png"
+      ? "eda-details-minimum.png"
       : testInfo.project.name === "desktop"
-        ? "/tmp/eda-details-desktop.png"
-        : testInfo.outputPath("details.png");
+        ? "eda-details-desktop.png"
+        : "details.png",
+  );
   await page.screenshot({ path, animations: "disabled" });
   await testInfo.attach("details-outputs", { path, contentType: "image/png" });
 }
@@ -212,120 +201,95 @@ test("final Outputs excludes input, raw query data and diagnostics", async ({
   );
 });
 
-for (const mode of ["deep analysis", "interactive handoff"] as const) {
-  test(`query log associates reads by question messageId for ${mode}`, async ({
-    page,
-  }, testInfo) => {
-    test.skip(isMobileProject(testInfo), "The details panel is desktop-only");
-    await mockTaskDetails(page, [secondQuery, firstQuery]);
-    await openAuthenticatedWorkspace(page, testInfo);
-    let messageCount = 0;
-    await page.route(`**/api/sessions/${sessionId}/messages`, async (route) => {
-      messageCount += 1;
-      await route.fulfill({
-        status: 201,
-        json: {
-          messageId:
-            messageCount === 1 ? firstQuery.messageId : secondQuery.messageId,
-        },
-      });
+test("query log associates task provenance by question messageId", async ({
+  page,
+}, testInfo) => {
+  test.skip(isMobileProject(testInfo), "The details panel is desktop-only");
+  await mockTaskDetails(page, [secondQuery, firstQuery]);
+  await openAuthenticatedWorkspace(page, testInfo);
+  let messageCount = 0;
+  let taskRequests = 0;
+  await page.route(`**/api/sessions/${sessionId}/messages`, async (route) => {
+    messageCount += 1;
+    await route.fulfill({
+      status: 201,
+      json: {
+        messageId:
+          messageCount === 1 ? firstQuery.messageId : secondQuery.messageId,
+      },
     });
-    await page.route(`**/api/sessions/${sessionId}/chat`, async (route) => {
-      await route.fulfill({
-        contentType: "text/event-stream",
-        body:
-          messageCount === 1
-            ? eventStream([
-                [
-                  "data_step",
-                  {
-                    stepId: "rooms-read",
-                    kind: "gql",
-                    label: "Read rooms",
-                    state: "completed",
-                    query: firstQuery.query,
-                    querySha256: firstQuery.querySha256,
-                    resultSha256: firstQuery.sha256,
-                    source: "lamna-healthcare",
-                    rowCount: String(firstQuery.rowCount),
-                  },
-                ],
-                ["delta", { text: "There are twelve rooms." }],
-                ["completed", { messageId: "msg_reply_rooms_12345678" }],
-              ])
-            : eventStream([["analysis_started", { taskId }]]),
-      });
-    });
-
-    const composer = page.getByRole("textbox", { name: "Analysis request" });
-    await composer.fill("How many rooms?");
-    await page.getByRole("button", { name: "Send message" }).click();
-    await expect(
-      page.getByText("There are twelve rooms.", { exact: true }),
-    ).toBeVisible();
-    if (mode === "deep analysis") {
-      await page.getByRole("button", { name: "Add context" }).click();
-      await page.getByRole("menuitem", { name: "Deep analysis" }).click();
-    }
-    await composer.fill("How many patients?");
-    await page.getByRole("button", { name: "Send message" }).click();
-    await expect(page).toHaveURL(
-      new RegExp(`\\?session=${sessionId}&task=${taskId}$`),
-    );
-    const provenance = await openSection(page, "Provenance");
-    const rooms = provenance.getByRole("group", {
-      name: "How many rooms?",
-      exact: true,
-    });
-    const patients = provenance.getByRole("group", {
-      name: "How many patients?",
-      exact: true,
-    });
-    await expect(rooms.locator(".query-text")).toHaveText([firstQuery.query]);
-    await expect(patients.locator(".query-text")).toHaveText([
-      secondQuery.query,
-    ]);
-    await expect(
-      rooms.getByText(secondQuery.query, { exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      patients.getByText(firstQuery.query, { exact: true }),
-    ).toHaveCount(0);
-    await expect(provenance.getByRole("group")).toHaveCount(2);
-    await expect(provenance.locator(".details-artifact")).toHaveCount(2);
-    await expect(provenance.getByRole("tree")).toHaveCount(0);
-    for (const rows of [firstRows, secondRows]) {
-      const link = provenance.getByRole("link", {
-        name: rows.displayName,
-        exact: true,
-      });
-      await expect(link).toHaveAttribute("href", contentPath(rows));
-      await expect(link).toHaveAttribute("download", rows.displayName);
-    }
-    await expect(provenance.getByRole("link")).toHaveCount(2);
-    for (const item of [
-      inputArtifact,
-      scriptArtifact,
-      manifestArtifact,
-      ...deliverables,
-    ]) {
-      await expect(
-        provenance.getByText(item.displayName, { exact: true }),
-      ).toHaveCount(0);
-    }
-    expect(messageCount).toBe(2);
-
-    await page
-      .getByRole("button", { name: "New chat", exact: true })
-      .first()
-      .click();
-    await openSection(page, "Provenance");
-    await expect(
-      provenance.getByText("No queries yet.", { exact: true }),
-    ).toBeVisible();
-    await expect(provenance.locator(".query-text")).toHaveCount(0);
   });
-}
+  await page.route(`**/api/sessions/${sessionId}/tasks`, async (route) => {
+    taskRequests += 1;
+    await route.fulfill({
+      status: 202,
+      json: { taskId, sessionId, status: "planning" },
+    });
+  });
+
+  const composer = page.getByRole("textbox", { name: "Analysis request" });
+  await composer.fill("How many rooms?");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(
+    page.getByText("The answer is grounded and complete.", { exact: true }),
+  ).toBeVisible();
+  await composer.fill("How many patients?");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`[?]session=${sessionId}&task=${taskId}$`),
+  );
+  const provenance = await openSection(page, "Provenance");
+  const rooms = provenance.getByRole("group", {
+    name: "How many rooms?",
+    exact: true,
+  });
+  const patients = provenance.getByRole("group", {
+    name: "How many patients?",
+    exact: true,
+  });
+  await expect(rooms.locator(".query-text")).toHaveText([firstQuery.query]);
+  await expect(patients.locator(".query-text")).toHaveText([secondQuery.query]);
+  await expect(rooms.getByText(secondQuery.query, { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    patients.getByText(firstQuery.query, { exact: true }),
+  ).toHaveCount(0);
+  await expect(provenance.getByRole("group")).toHaveCount(2);
+  await expect(provenance.locator(".details-artifact")).toHaveCount(2);
+  await expect(provenance.getByRole("tree")).toHaveCount(0);
+  for (const rows of [firstRows, secondRows]) {
+    const link = provenance.getByRole("link", {
+      name: rows.displayName,
+      exact: true,
+    });
+    await expect(link).toHaveAttribute("href", contentPath(rows));
+    await expect(link).toHaveAttribute("download", rows.displayName);
+  }
+  await expect(provenance.getByRole("link")).toHaveCount(2);
+  for (const item of [
+    inputArtifact,
+    scriptArtifact,
+    manifestArtifact,
+    ...deliverables,
+  ]) {
+    await expect(
+      provenance.getByText(item.displayName, { exact: true }),
+    ).toHaveCount(0);
+  }
+  expect(messageCount).toBe(2);
+  expect(taskRequests).toBe(2);
+
+  await page
+    .getByRole("button", { name: "New chat", exact: true })
+    .first()
+    .click();
+  await openSection(page, "Provenance");
+  await expect(
+    provenance.getByText("No queries yet.", { exact: true }),
+  ).toBeVisible();
+  await expect(provenance.locator(".query-text")).toHaveCount(0);
+});
 
 test("resumed query log does not invent question associations", async ({
   page,
@@ -650,25 +614,33 @@ test("mobile upload gates Send on mocked scanning, scan_failed and clean states"
     name: "Input upload",
     exact: true,
   });
-  const send = page.getByRole("button", { name: "Send message" });
-  await expect(status.getByText("Scanning", { exact: true })).toBeVisible();
+  await expect(
+    status.getByText("Checking the file for malware…", { exact: true }),
+  ).toBeVisible();
   await expect(status.getByText(uploadName, { exact: true })).toBeVisible();
   expect(uploadBody).toContain(`name="upload"; filename="${uploadName}"`);
   expect(uploadBody).toContain("facility,capacity\nwest,42\n");
-  await expect(send).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Wait for the file scan to finish" }),
+  ).toBeDisabled();
   await composer.press("Enter");
   expect(taskBodies).toHaveLength(0);
   expect(statusReads).toBe(0);
 
   scanState = "scan_failed";
-  await page.getByRole("button", { name: "Refresh upload status" }).click();
-  await expect(status.getByText("Scan failed", { exact: true })).toBeVisible();
-  await expect(send).toBeDisabled();
+  await expect(status.getByText("Scan failed", { exact: true })).toBeVisible({
+    timeout: 3_000,
+  });
+  await expect(
+    page.getByRole("button", { name: "Remove the file to send without it" }),
+  ).toBeDisabled();
   scanState = "clean";
   await page.getByRole("button", { name: "Refresh upload status" }).click();
   await expect(status.getByText("Clean", { exact: true })).toBeVisible();
-  await expect(send).toBeEnabled();
-  expect(statusReads).toBe(2);
+  await expect(
+    page.getByRole("button", { name: "Send message" }),
+  ).toBeEnabled();
+  expect(statusReads).toBeGreaterThanOrEqual(2);
   expect(taskBodies).toHaveLength(0);
   await expectContained(page.locator(".composer"));
   await expectContained(page.locator(".input-upload__status"));
@@ -676,17 +648,16 @@ test("mobile upload gates Send on mocked scanning, scan_failed and clean states"
     path: testInfo.outputPath("mobile-upload.png"),
     animations: "disabled",
   });
-  await send.click();
+  await page.getByRole("button", { name: "Send message" }).click();
   await expect.poll(() => taskBodies.length).toBe(1);
   expect(taskBodies[0]).toMatchObject({ inputUploadIds: [uploadId] });
   await expect(status).toHaveCount(0);
 });
 
-test("mobile rejected mock upload can be removed without forcing deep analysis", async ({
+test("mobile rejected mock upload can be removed before sending a task", async ({
   page,
 }, testInfo) => {
   await openMobileWorkspace(page, testInfo);
-  let chatRequests = 0;
   let taskRequests = 0;
   await page.route(`**/api/sessions/${sessionId}/uploads`, async (route) => {
     await route.fulfill({
@@ -705,13 +676,6 @@ test("mobile rejected mock upload can be removed without forcing deep analysis",
       json: { taskId, sessionId, status: "planning" },
     });
   });
-  await page.route(`**/api/sessions/${sessionId}/chat`, async (route) => {
-    chatRequests += 1;
-    await route.fulfill({
-      contentType: "text/event-stream",
-      body: interactiveEventStream(),
-    });
-  });
   await page.getByLabel("Choose analysis input").setInputFiles({
     name: "rejected-local.csv",
     mimeType: "text/csv",
@@ -728,23 +692,18 @@ test("mobile rejected mock upload can be removed without forcing deep analysis",
   const composer = page.getByRole("textbox", { name: "Analysis request" });
   await composer.fill("Question without the rejected file");
   await expect(
-    page.getByRole("button", { name: "Send message" }),
+    page.getByRole("button", { name: "Remove the file to send without it" }),
   ).toBeDisabled();
   await composer.press("Enter");
-  expect(chatRequests).toBe(0);
   expect(taskRequests).toBe(0);
   await page.getByRole("button", { name: "Remove attachment" }).click();
   await expect(status).toHaveCount(0);
   await expect(
     page.getByText("rejected-local.csv", { exact: true }),
   ).toHaveCount(0);
-  await expect(
-    page.getByText("Deep analysis enabled", { exact: true }),
-  ).toHaveCount(0);
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(
     page.getByText("The answer is grounded and complete.", { exact: true }),
   ).toBeVisible();
-  expect(chatRequests).toBe(1);
-  expect(taskRequests).toBe(0);
+  expect(taskRequests).toBe(1);
 });

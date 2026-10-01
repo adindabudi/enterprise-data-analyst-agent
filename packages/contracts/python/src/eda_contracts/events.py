@@ -107,6 +107,7 @@ class OperationEvent(AttemptEventBase):
 class TodoItem(ContractModel):
     todo_id: str
     text: str = Field(min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=2000)
     completed: bool
 
 

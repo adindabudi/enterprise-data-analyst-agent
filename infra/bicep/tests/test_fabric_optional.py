@@ -134,7 +134,7 @@ def test_enabled_runtime_receives_only_nonsecret_fabric_configuration() -> None:
     assert "FABRIC_SEMANTIC_MODELS_JSON" not in api_environment
     assert "FABRIC_ONTOLOGIES_JSON" in api_environment
     manifest = (ROOT / "azure.yaml").read_text(encoding="utf-8")
-    assert "FABRIC_ENABLED: ${FABRIC_ENABLED=false}" in manifest
+    assert "FABRIC_ENABLED: ${FABRIC_ENABLED=false}" not in manifest
     assert "output FABRIC_KEY_VAULT_URL string" in main
     assert "FABRIC_RUNTIME_ENABLED" not in manifest
     assert "fabricRuntimeEnabled" not in main

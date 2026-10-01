@@ -1,6 +1,7 @@
 const FABRIC_START_PATH = "/api/fabric/auth/start";
 const FABRIC_COMPLETE_PATH = "/api/fabric/auth/complete";
 const FABRIC_STATUS_PATH = "/api/fabric/auth/status";
+const FABRIC_SOURCE_STATUS_PATH = "/api/fabric/source/status";
 
 export type FabricSourceMetadata = {
   alias: string;
@@ -13,6 +14,9 @@ export type FabricAuthorizationStatus = {
   chatQuery: boolean;
   source?: FabricSourceMetadata;
 };
+
+/** Whether the source's Fabric capacity is running, which the link itself cannot show. */
+export type FabricCapacityState = "active" | "paused" | "unknown";
 
 export async function startFabricAuthorization(
   taskId?: string,
@@ -76,6 +80,28 @@ export async function getFabricAuthorizationStatus(): Promise<FabricAuthorizatio
     throw new Error("Fabric authorization status is invalid");
   }
   return payload as FabricAuthorizationStatus;
+}
+
+export async function getFabricCapacityState(
+  signal?: AbortSignal,
+): Promise<FabricCapacityState> {
+  const response = await fetch(FABRIC_SOURCE_STATUS_PATH, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    ...(signal === undefined ? {} : { signal }),
+  });
+  if (!response.ok) {
+    throw new Error("Fabric source status is unavailable");
+  }
+  const payload: unknown = await response.json();
+  if (
+    !isRecord(payload) ||
+    Object.keys(payload).length !== 1 ||
+    !["active", "paused", "unknown"].includes(String(payload.capacity))
+  ) {
+    throw new Error("Fabric source status is invalid");
+  }
+  return payload.capacity as FabricCapacityState;
 }
 
 export async function completeFabricAuthorization(): Promise<void> {
