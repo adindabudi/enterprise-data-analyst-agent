@@ -1,4 +1,4 @@
-"""Chat reads rows, and the hosted agent finds them. Every hop, once, in order.
+"""Chat reads rows, and the analyst finds them. Every hop, once, in order.
 
 Each hop has its own unit tests and each passed while the chain as a whole was
 never run. The failure this guards against is silent: a task starts, the rows are
@@ -15,8 +15,8 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from eda_api.analysis.attempts import AttemptStatus, TaskAttempt
 from eda_api.chat.service import QueryRun
-from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.storage.query_results import CosmosBlobQueryResultWriter
 from eda_api.task_service import TaskService
 from eda_runtime_state.messages import CanonicalMessage, InMemoryMessageRepository
@@ -82,24 +82,16 @@ class Workspace:
         self.items[str(body["id"])] = body
 
 
-class Hosted:
+class Executor:
     def __init__(self) -> None:
         self.started: list[str] = []
 
-    async def start(
-        self,
-        task_id: str,
-        *,
-        user_identity: str,
-        previous_response_id: str | None = None,
-    ) -> HostedResponseAttempt:
-        del user_identity, previous_response_id
+    async def start(self, task_id: str) -> TaskAttempt:
         self.started.append(task_id)
-        return HostedResponseAttempt(id="resp_12345678", status=HostedResponseStatus.IN_PROGRESS)
+        return TaskAttempt(id="resp_12345678", status=AttemptStatus.IN_PROGRESS)
 
-    async def cancel(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        del user_identity
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.CANCELLED)
+    async def cancel(self, response_id: str) -> TaskAttempt:
+        return TaskAttempt(id=response_id, status=AttemptStatus.CANCELLED)
 
 
 class Context:
@@ -113,14 +105,14 @@ class Context:
 
 
 @pytest.mark.asyncio
-async def test_rows_read_in_chat_reach_the_hosted_agent_as_a_file_it_can_open() -> None:
-    workspace, blobs, runtime, hosted = Workspace(), Blobs(), InMemoryRuntimeStateRepository(), Hosted()
+async def test_rows_read_in_chat_reach_the_analyst_as_a_file_it_can_open() -> None:
+    workspace, blobs, runtime, executor = Workspace(), Blobs(), InMemoryRuntimeStateRepository(), Executor()
     messages = InMemoryMessageRepository()
     source = await messages.append_user(PARTITION, "export the ICU occupancy to excel", "source-message-0021")
     service = TaskService(
         runtime,
         messages,
-        hosted,  # type: ignore[arg-type]
+        executor,  # type: ignore[arg-type]
         query_results=CosmosBlobQueryResultWriter(workspace, blobs),  # type: ignore[arg-type]
     )
 
@@ -142,7 +134,7 @@ async def test_rows_read_in_chat_reach_the_hosted_agent_as_a_file_it_can_open() 
     assert record.source_version is None
 
     # 3. The background response was started only after the inputs existed.
-    assert hosted.started == [task.id]
+    assert executor.started == [task.id]
     assert task.active_attempt_id == "resp_12345678"
 
     # 4. The agent is told the rows exist, and can address them exactly as the sandbox expects.
@@ -183,13 +175,13 @@ async def test_rows_read_in_chat_reach_the_hosted_agent_as_a_file_it_can_open() 
 
 @pytest.mark.asyncio
 async def test_a_task_with_no_query_reaches_the_agent_exactly_as_it_did_before() -> None:
-    runtime, hosted = InMemoryRuntimeStateRepository(), Hosted()
+    runtime, executor = InMemoryRuntimeStateRepository(), Executor()
     messages = InMemoryMessageRepository()
     source = await messages.append_user(PARTITION, "explain the schema", "source-message-0022")
     service = TaskService(
         runtime,
         messages,
-        hosted,  # type: ignore[arg-type]
+        executor,  # type: ignore[arg-type]
         query_results=CosmosBlobQueryResultWriter(Workspace(), Blobs()),  # type: ignore[arg-type]
     )
 

@@ -270,7 +270,7 @@ def fabric_stack(
         ),
         runtime_repository_override=InMemoryRuntimeStateRepository(),
         event_store_override=NullTaskEventStore(),
-        hosted_client_override=_FakeDurableClient(),
+        task_executor_override=_FakeDurableClient(),
         fabric_auth_service_override=coordinator,
         fabric_readiness_override=FabricPackStatus.READY,
     )
@@ -717,7 +717,7 @@ def test_disabled_fabric_routes_return_not_found(owners: tuple[Principal, Princi
         ),
         runtime_repository_override=InMemoryRuntimeStateRepository(),
         event_store_override=NullTaskEventStore(),
-        hosted_client_override=_FakeDurableClient(),
+        task_executor_override=_FakeDurableClient(),
     )
     with TestClient(app, base_url="https://analyst.example.test", raise_server_exceptions=False) as client:
         response = client.get(

@@ -17,9 +17,7 @@ from eda_worker.cleanup import (
     CosmosCleanupWorkspace,
     parse_cleanup_before,
 )
-from eda_worker.config import WorkerSettings
 from eda_worker.documents.publication import publish_document_contract
-from eda_worker.hosted_server import run_hosted_server
 from eda_worker.telemetry import configure_logging, configure_telemetry
 
 
@@ -108,7 +106,6 @@ async def run_document_contract_publication() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(prog="eda-worker")
     subcommands = parser.add_subparsers(dest="command", required=True)
-    subcommands.add_parser("run")
     subcommands.add_parser("publish-documents")
     cleanup = subcommands.add_parser("cleanup")
     cleanup.add_argument("--before", required=True)
@@ -121,9 +118,6 @@ def main() -> None:
     arguments = parser.parse_args()
     configure_logging()
     configure_telemetry()
-    if arguments.command == "run":
-        run_hosted_server(WorkerSettings.model_validate({}))
-        return
     if arguments.command == "publish-documents":
         try:
             digest = asyncio.run(run_document_contract_publication())

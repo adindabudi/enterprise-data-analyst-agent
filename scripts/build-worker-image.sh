@@ -136,12 +136,11 @@ mv "$temporary_manifest" "$artifact_directory/worker-image.json"
 
 azd env set EDA_WORKER_IMAGE "$image" >/dev/null || fail "unable to persist worker image metadata"
 azd env set EDA_WORKER_IMAGE_DIGEST "$digest" >/dev/null || fail "unable to persist worker digest metadata"
-azd env set AZD_AGENT_SKIP_ACR "true" >/dev/null || fail "unable to select the prebuilt agent image"
 azd env set AZURE_CONTAINER_REGISTRY_ENDPOINT "$registry_login_server" >/dev/null \
-    || fail "unable to persist the agent registry endpoint"
+    || fail "unable to persist the registry endpoint"
 if [ -n "$registry_resource_id" ]; then
     azd env set AZURE_CONTAINER_REGISTRY_RESOURCE_ID "$registry_resource_id" >/dev/null \
-        || fail "unable to persist the agent registry resource ID"
+        || fail "unable to persist the registry resource ID"
 fi
 
 printf '%s\n' "worker image digest captured for ${environment_name}"

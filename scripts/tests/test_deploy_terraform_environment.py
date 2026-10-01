@@ -283,7 +283,7 @@ def test_script_never_calls_azd_up_or_provision_and_deploys_all_services_once() 
     assert "azd up" not in source
 
 
-def test_bridge_remaps_final_outputs_for_hosted_agent_and_sandbox() -> None:
+def test_bridge_remaps_final_outputs_for_the_api_and_sandbox() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
     assert source.count("map_terraform_outputs_to_azd") >= 3

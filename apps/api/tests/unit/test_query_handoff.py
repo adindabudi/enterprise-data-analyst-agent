@@ -5,8 +5,8 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from eda_api.analysis.attempts import AttemptStatus, TaskAttempt
 from eda_api.chat.service import MAX_HANDED_OFF_QUERIES, QueryRun, _QueryLedger
-from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.task_service import TaskService
 from eda_contracts import ArtifactKind, ArtifactRef
 from eda_runtime_state.messages import InMemoryMessageRepository
@@ -92,16 +92,9 @@ class DurableClient:
     def __init__(self) -> None:
         self.scheduled: list[str] = []
 
-    async def start(
-        self,
-        task_id: str,
-        *,
-        user_identity: str,
-        previous_response_id: str | None = None,
-    ) -> HostedResponseAttempt:
-        del user_identity, previous_response_id
+    async def start(self, task_id: str) -> TaskAttempt:
         self.scheduled.append(task_id)
-        return HostedResponseAttempt(id=f"resp_{task_id[5:]}", status=HostedResponseStatus.QUEUED)
+        return TaskAttempt(id=f"resp_{task_id[5:]}", status=AttemptStatus.QUEUED)
 
 
 async def _start(writer: Writer | None, runs: tuple[QueryRun, ...]) -> tuple[Any, Repository, DurableClient]:

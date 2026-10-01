@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
+from eda_api.analysis.attempts import AttemptStatus, TaskAttempt
 from eda_api.auth.models import Principal
-from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.task_service import SourceMessageNotFoundError, TaskService
 from eda_contracts.tasks import TaskStatus
 from eda_runtime_state.messages import InMemoryMessageRepository
@@ -14,42 +13,35 @@ from eda_runtime_state.models import TaskRecord
 from eda_runtime_state.tasks import InMemoryRuntimeStateRepository
 
 
-class FakeHostedClient:
+class FakeExecutor:
     def __init__(self, repository: InMemoryRuntimeStateRepository | None = None) -> None:
-        self.started: list[tuple[str, str, str | None]] = []
-        self.cancelled: list[tuple[str, str]] = []
+        self.started: list[str] = []
+        self.cancelled: list[str] = []
         self._repository = repository
         self.schedule_checks: list[tuple[str, bool]] = []
-        self.states: dict[str, HostedResponseStatus] = {}
+        self.states: dict[str, AttemptStatus] = {}
         self.state_error: Exception | None = None
         self._attempt_sequence = 0
 
-    async def start(
-        self,
-        task_id: str,
-        *,
-        user_identity: str,
-        previous_response_id: str | None = None,
-    ) -> HostedResponseAttempt:
+    async def start(self, task_id: str) -> TaskAttempt:
         if self._repository is not None:
             self.schedule_checks.append((task_id, await self._repository.resolve_task(task_id) is not None))
         self._attempt_sequence += 1
         response_id = f"resp_attempt{self._attempt_sequence:08d}"
-        self.started.append((task_id, user_identity, previous_response_id))
-        self.states[response_id] = HostedResponseStatus.QUEUED
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.QUEUED)
+        self.started.append(task_id)
+        self.states[response_id] = AttemptStatus.QUEUED
+        return TaskAttempt(id=response_id, status=AttemptStatus.QUEUED)
 
-    async def get(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        del user_identity
+    async def get(self, response_id: str) -> TaskAttempt:
         if self.state_error is not None:
             raise self.state_error
-        status = self.states.get(response_id, HostedResponseStatus.IN_PROGRESS)
-        return HostedResponseAttempt(id=response_id, status=status)
+        status = self.states.get(response_id, AttemptStatus.IN_PROGRESS)
+        return TaskAttempt(id=response_id, status=status)
 
-    async def cancel(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        self.cancelled.append((response_id, user_identity))
-        self.states[response_id] = HostedResponseStatus.CANCELLED
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.CANCELLED)
+    async def cancel(self, response_id: str) -> TaskAttempt:
+        self.cancelled.append(response_id)
+        self.states[response_id] = AttemptStatus.CANCELLED
+        return TaskAttempt(id=response_id, status=AttemptStatus.CANCELLED)
 
     async def close(self) -> None:
         return None
@@ -93,7 +85,7 @@ def owner() -> Principal:
 
 @pytest.mark.asyncio
 async def test_other_owner_task_lookup_is_hidden(repository: InMemoryRuntimeStateRepository, owner: Principal) -> None:
-    service = TaskService(repository, InMemoryMessageRepository(), FakeHostedClient())
+    service = TaskService(repository, InMemoryMessageRepository(), FakeExecutor())
     other = owner.model_copy(update={"owner_object_id": UUID("44444444-4444-4444-4444-444444444444")})
 
     assert await service.get_owned_task(other, "task_12345678") is None
@@ -103,7 +95,7 @@ async def test_other_owner_task_lookup_is_hidden(repository: InMemoryRuntimeStat
 async def test_terminal_snapshot_has_checkpoint_and_one_terminal_event(
     repository: InMemoryRuntimeStateRepository, owner: Principal, task: TaskRecord
 ) -> None:
-    service = TaskService(repository, InMemoryMessageRepository(), FakeHostedClient())
+    service = TaskService(repository, InMemoryMessageRepository(), FakeExecutor())
     owned = await service.get_owned_task(owner, task.id)
 
     assert owned is not None
@@ -114,7 +106,7 @@ async def test_terminal_snapshot_has_checkpoint_and_one_terminal_event(
 
 
 @pytest.mark.asyncio
-async def test_a_failed_hosted_response_stops_reporting_the_task_as_running() -> None:
+async def test_a_failed_attempt_stops_reporting_the_task_as_running() -> None:
     now = datetime.now(UTC)
     running = TaskRecord(
         id="task_87654321",
@@ -132,9 +124,9 @@ async def test_a_failed_hosted_response_stops_reporting_the_task_as_running() ->
     )
     repository = InMemoryRuntimeStateRepository()
     await repository.create_task(running, "request-87654321")
-    hosted = FakeHostedClient()
-    hosted.states["resp_running01"] = HostedResponseStatus.FAILED
-    service = TaskService(repository, InMemoryMessageRepository(), hosted)
+    executor = FakeExecutor()
+    executor.states["resp_running01"] = AttemptStatus.FAILED
+    service = TaskService(repository, InMemoryMessageRepository(), executor)
 
     reconciled = await service.reconcile_abandoned_task(running)
 
@@ -146,7 +138,7 @@ async def test_a_failed_hosted_response_stops_reporting_the_task_as_running() ->
 
 
 @pytest.mark.asyncio
-async def test_a_live_hosted_response_leaves_the_task_running() -> None:
+async def test_a_live_attempt_leaves_the_task_running() -> None:
     now = datetime.now(UTC)
     running = TaskRecord(
         id="task_87654322",
@@ -164,15 +156,15 @@ async def test_a_live_hosted_response_leaves_the_task_running() -> None:
     )
     repository = InMemoryRuntimeStateRepository()
     await repository.create_task(running, "request-87654322")
-    hosted = FakeHostedClient()
-    hosted.states["resp_running02"] = HostedResponseStatus.IN_PROGRESS
-    service = TaskService(repository, InMemoryMessageRepository(), hosted)
+    executor = FakeExecutor()
+    executor.states["resp_running02"] = AttemptStatus.IN_PROGRESS
+    service = TaskService(repository, InMemoryMessageRepository(), executor)
 
     assert (await service.reconcile_abandoned_task(running)).status is TaskStatus.ANALYZING
 
 
 @pytest.mark.asyncio
-async def test_an_unreachable_hosted_endpoint_leaves_the_task_alone() -> None:
+async def test_an_unreachable_executor_leaves_the_task_alone() -> None:
     now = datetime.now(UTC)
     running = TaskRecord(
         id="task_87654323",
@@ -190,19 +182,19 @@ async def test_an_unreachable_hosted_endpoint_leaves_the_task_alone() -> None:
     )
     repository = InMemoryRuntimeStateRepository()
     await repository.create_task(running, "request-87654323")
-    hosted = FakeHostedClient()
-    hosted.state_error = RuntimeError("hosted endpoint unreachable")
-    service = TaskService(repository, InMemoryMessageRepository(), hosted)
+    executor = FakeExecutor()
+    executor.state_error = RuntimeError("executor unreachable")
+    service = TaskService(repository, InMemoryMessageRepository(), executor)
 
     assert (await service.reconcile_abandoned_task(running)).status is TaskStatus.ANALYZING
 
 
 @pytest.mark.asyncio
-async def test_start_commits_product_state_before_starting_the_hosted_response(owner: Principal) -> None:
+async def test_start_commits_product_state_before_starting_the_attempt(owner: Principal) -> None:
     repository = InMemoryRuntimeStateRepository()
     messages = InMemoryMessageRepository()
-    hosted = FakeHostedClient(repository)
-    service = TaskService(repository, messages, hosted)
+    executor = FakeExecutor(repository)
+    service = TaskService(repository, messages, executor)
     partition = task_partition(owner)
     source_message = await service.append_user_message(partition, "Analyze FY26 revenue", "request-message-1")
 
@@ -210,17 +202,17 @@ async def test_start_commits_product_state_before_starting_the_hosted_response(o
 
     assert task.source_message_id == source_message.id
     assert await repository.get_owned_task(partition, task.id) is not None
-    assert hosted.schedule_checks == [(task.id, True)]
+    assert executor.schedule_checks == [(task.id, True)]
     assert task.active_attempt_id == "resp_attempt00000001"
-    assert hosted.started == [(task.id, _expected_hosted_user(task), None)]
+    assert executor.started == [task.id]
 
 
 @pytest.mark.asyncio
 async def test_analyze_lane_schedules_even_for_a_greeting(owner: Principal) -> None:
     repository = InMemoryRuntimeStateRepository()
     messages = InMemoryMessageRepository()
-    hosted = FakeHostedClient(repository)
-    service = TaskService(repository, messages, hosted)
+    executor = FakeExecutor(repository)
+    service = TaskService(repository, messages, executor)
     partition = task_partition(owner)
     source_message = await service.append_user_message(partition, "halo", "request-greeting-message")
 
@@ -228,37 +220,37 @@ async def test_analyze_lane_schedules_even_for_a_greeting(owner: Principal) -> N
 
     assert task.status is TaskStatus.PLANNING
     assert task.final_message_id is None
-    assert hosted.started == [(task.id, _expected_hosted_user(task), None)]
+    assert executor.started == [task.id]
 
 
 @pytest.mark.asyncio
-async def test_start_retry_reuses_the_committed_hosted_attempt(owner: Principal) -> None:
+async def test_start_retry_reuses_the_committed_attempt(owner: Principal) -> None:
     repository = InMemoryRuntimeStateRepository()
     messages = InMemoryMessageRepository()
     partition = task_partition(owner)
     source_message = await messages.append_user(partition, "Analyze FY26 revenue", "request-message-duplicate")
-    hosted = FakeHostedClient()
-    service = TaskService(repository, messages, hosted)
+    executor = FakeExecutor()
+    service = TaskService(repository, messages, executor)
 
     first = await service.start_task(partition, "request-task-duplicate", source_message.id)
     retried = await service.start_task(partition, "request-task-duplicate", source_message.id)
 
     assert retried == first
-    assert len(hosted.started) == 1
+    assert len(executor.started) == 1
 
 
 @pytest.mark.asyncio
 async def test_steering_persists_before_signal_and_retries_without_duplicate(
     repository: InMemoryRuntimeStateRepository, task: TaskRecord
 ) -> None:
-    hosted = FakeHostedClient()
-    service = TaskService(repository, InMemoryMessageRepository(), hosted)
+    executor = FakeExecutor()
+    service = TaskService(repository, InMemoryMessageRepository(), executor)
     first = await service.steer(task.partition(), task.id, "check APAC", "command-12345678")
     retried = await service.steer(task.partition(), task.id, "check APAC", "command-12345678")
 
     assert first.id == retried.id
-    assert hosted.started == []
-    assert hosted.cancelled == []
+    assert executor.started == []
+    assert executor.cancelled == []
     assert [command.sequence for command in await repository.pending_commands(task.id)] == [1]
 
 
@@ -283,14 +275,14 @@ async def test_cancel_persists_before_signal_and_sets_cancellation_requested(
     )
     repository = InMemoryRuntimeStateRepository()
     await repository.create_task(running, "request-cancel-123")
-    hosted = FakeHostedClient()
-    service = TaskService(repository, InMemoryMessageRepository(), hosted)
+    executor = FakeExecutor()
+    service = TaskService(repository, InMemoryMessageRepository(), executor)
 
     first = await service.cancel(running.partition(), running.id, "command-cancel-1")
     retried = await service.cancel(running.partition(), running.id, "command-cancel-1")
 
     assert first.id == retried.id
-    assert hosted.cancelled == [("resp_cancel123", _expected_hosted_user(running))]
+    assert executor.cancelled == ["resp_cancel123"]
     refreshed = await repository.get_owned_task(running.partition(), running.id)
     assert refreshed is not None
     assert refreshed.cancellation_requested is True
@@ -299,7 +291,7 @@ async def test_cancel_persists_before_signal_and_sets_cancellation_requested(
 @pytest.mark.asyncio
 async def test_start_rejects_missing_source_message(owner: Principal) -> None:
     repository = InMemoryRuntimeStateRepository()
-    service = TaskService(repository, InMemoryMessageRepository(), FakeHostedClient())
+    service = TaskService(repository, InMemoryMessageRepository(), FakeExecutor())
     partition = task_partition(owner)
 
     with pytest.raises(SourceMessageNotFoundError):
@@ -310,7 +302,7 @@ async def test_start_rejects_missing_source_message(owner: Principal) -> None:
 async def test_start_rejects_source_message_from_other_partition(owner: Principal) -> None:
     repository = InMemoryRuntimeStateRepository()
     messages = InMemoryMessageRepository()
-    service = TaskService(repository, messages, FakeHostedClient())
+    service = TaskService(repository, messages, FakeExecutor())
     owner_partition = task_partition(owner)
     other_partition = owner_partition.model_copy(
         update={"owner_object_id": UUID("44444444-4444-4444-4444-444444444444")}
@@ -329,8 +321,3 @@ def task_partition(owner: Principal):
         owner_object_id=owner.owner_object_id,
         session_id="ses_1234567890abcdef",
     )
-
-
-def _expected_hosted_user(task: TaskRecord) -> str:
-    material = f"{task.tenant_id}\0{task.owner_object_id}".encode()
-    return f"usr_{hashlib.sha256(material).hexdigest()[:32]}"

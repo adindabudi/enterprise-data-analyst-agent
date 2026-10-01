@@ -1,6 +1,6 @@
 """The task lifecycle, driven as a plain loop by whoever owns the task.
 
-This is the behaviour the hosted workflow expressed as a graph (intake, then
+This is the task's whole run (intake, then
 analysis passes, then a terminal result), without a workflow engine: the
 application's supervisor calls it directly, and ownership is re-checked before
 every pass and before anything is published.

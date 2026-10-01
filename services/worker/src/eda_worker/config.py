@@ -44,8 +44,6 @@ class WorkerSettings(BaseSettings):
     sandbox_disk_image_id: str = Field(min_length=1, max_length=128)
     model_contract_path: Path = Path("/app/config/model-contract.json")
     tokenizer_calibration_path: Path = Path("/app/config/tokenizer-calibration.json")
-    health_host: str = "0.0.0.0"  # noqa: S104 - private Container Apps health listener
-    health_port: int = Field(default=8001, ge=0, le=65535)
 
     @model_validator(mode="after")
     def validate_transport_security(self) -> Self:

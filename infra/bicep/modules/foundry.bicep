@@ -3,21 +3,12 @@ param location string
 param tags object
 param webIdentityPrincipalId string
 param workerIdentityPrincipalId string
-param userImpersonationRoleDefinitionId string
 param agentSubnetId string
 param modelProfile 'gpt-5.6-terra-medium-v1'
 param modelCapacity int
 
 var projectName = 'eda-project'
 var deploymentName = 'gpt-5.6-terra'
-var foundryAgentConsumerRoleDefinitionId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  'eed3b665-ab3a-47b6-8f48-c9382fb1dad6'
-)
-var foundryUserRoleDefinitionId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '53ca6127-db72-4b80-b1b0-d745d6d5456d'
-)
 
 #disable-next-line use-recent-api-versions
 resource account 'Microsoft.CognitiveServices/accounts@2025-10-01-preview' = {
@@ -57,16 +48,6 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-10-01-previ
     type: 'SystemAssigned'
   }
   properties: {}
-}
-
-resource projectFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(account.id, project.id, foundryUserRoleDefinitionId)
-  scope: account
-  properties: {
-    principalId: project.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: foundryUserRoleDefinitionId
-  }
 }
 
 #disable-next-line use-recent-api-versions
@@ -117,31 +98,10 @@ resource webCognitiveServicesUser 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-resource webFoundryAgentConsumer 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(project.id, webIdentityPrincipalId, foundryAgentConsumerRoleDefinitionId)
-  scope: project
-  properties: {
-    principalId: webIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: foundryAgentConsumerRoleDefinitionId
-  }
-}
-
-resource webHostedUserImpersonation 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(project.id, webIdentityPrincipalId, userImpersonationRoleDefinitionId)
-  scope: project
-  properties: {
-    principalId: webIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: userImpersonationRoleDefinitionId
-  }
-}
-
 output accountId string = account.id
 output accountName string = account.name
 output projectId string = project.id
 output projectName string = project.name
-output projectPrincipalId string = project.identity.principalId
 output projectEndpoint string = 'https://${foundryName}.services.ai.azure.com/api/projects/${projectName}'
 output resourceEndpoint string = 'https://${foundryName}.openai.azure.com'
 output deploymentName string = deploymentName

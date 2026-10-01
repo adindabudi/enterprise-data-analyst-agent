@@ -30,13 +30,12 @@ def test_production_worker_settings_require_all_secure_service_transports() -> N
     settings = WorkerSettings.model_validate(settings_values())
 
     assert settings.eda_model_profile == "gpt-5.6-terra-medium-v1"
-    assert settings.health_port == 8001
 
     with pytest.raises(ValidationError, match="redis_url"):
         WorkerSettings.model_validate(settings_values(redis_url="redis://localhost:6379/0"))
 
 
-def test_hosted_worker_accepts_the_platform_injected_foundry_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_worker_reads_the_foundry_project_endpoint_by_its_azd_name(monkeypatch: pytest.MonkeyPatch) -> None:
     environment = {
         "EDA_ENTRA_CLIENT_ID": "33333333-3333-3333-3333-333333333333",
         "EDA_COSMOS_ENDPOINT": "https://example.documents.azure.com",

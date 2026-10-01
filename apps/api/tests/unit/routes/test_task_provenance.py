@@ -7,10 +7,10 @@ from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
+from eda_api.analysis.attempts import AttemptStatus, TaskAttempt
 from eda_api.auth.models import AuthSessionRecord, Principal
 from eda_api.auth.repository import InMemoryAuthRepository
 from eda_api.config import Settings
-from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.main import create_app
 from eda_api.storage.artifacts import InMemoryArtifactCatalog, PublishedArtifact
 from eda_api.storage.uploads import InMemoryBlobStore, InMemoryUploadRepository, UploadService
@@ -27,23 +27,14 @@ QUERY = "MATCH (p:patients)-[:patients_has_rooms]->(r:rooms) RETURN p.PatientId 
 
 
 class FakeDurableClient:
-    async def start(
-        self,
-        task_id: str,
-        *,
-        user_identity: str,
-        previous_response_id: str | None = None,
-    ) -> HostedResponseAttempt:
-        del user_identity, previous_response_id
-        return HostedResponseAttempt(id=f"resp_{task_id[5:]}", status=HostedResponseStatus.QUEUED)
+    async def start(self, task_id: str) -> TaskAttempt:
+        return TaskAttempt(id=f"resp_{task_id[5:]}", status=AttemptStatus.QUEUED)
 
-    async def get(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        del user_identity
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.IN_PROGRESS)
+    async def get(self, response_id: str) -> TaskAttempt:
+        return TaskAttempt(id=response_id, status=AttemptStatus.IN_PROGRESS)
 
-    async def cancel(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        del user_identity
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.CANCELLED)
+    async def cancel(self, response_id: str) -> TaskAttempt:
+        return TaskAttempt(id=response_id, status=AttemptStatus.CANCELLED)
 
     async def close(self) -> None:
         return None
@@ -84,7 +75,7 @@ def owner(
         ),
         runtime_repository_override=runtime,
         event_store_override=NullTaskEventStore(),
-        hosted_client_override=FakeDurableClient(),
+        task_executor_override=FakeDurableClient(),
         message_repository_override=InMemoryMessageRepository(),
         artifact_catalog_override=catalog,
     )

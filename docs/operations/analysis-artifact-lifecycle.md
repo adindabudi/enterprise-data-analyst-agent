@@ -41,7 +41,7 @@ bound to the candidate's identity, version, digest, and validation profile.
 Completion checks every required format and count against matching published
 validation evidence, the interactive HTML requirement, and unfinished plan steps.
 
-The existing Hosted graph permits at most two additional output-repair rounds.
+The task lifecycle permits at most two additional output-repair rounds.
 Each round rechecks controls and uses deterministic completion feedback. Infrastructure
 exceptions do not enter this repair path. Cancellation, success, and final failure
 continue through the existing task-scoped sandbox cleanup.
@@ -49,13 +49,13 @@ continue through the existing task-scoped sandbox cleanup.
 ## Verification
 
 Run the gateway real-validator tests, repository contract tests, output planner
-tests, finalization tests, Hosted workflow tests, and
+tests, finalization tests, task lifecycle tests, and
 `services/worker/tests/integration/test_artifact_lifecycle.py`. The latter executes
 real Python fixtures and HTML/XLSX validators using the ACA adapter with a local
 filesystem transport; it verifies two different input datasets and cleanup.
 
 These tests are not Azure or natural-language acceptance. Release evidence also
-requires authenticated upload and scan, a natural request to the deployed Hosted
-agent, independently checked downloadable HTML/XLSX, correct terminal status,
+requires authenticated upload and scan, a natural request to the deployed
+analyst, independently checked downloadable HTML/XLSX, correct terminal status,
 and verified sandbox deletion. The legacy core acceptance script uses a fixture
 generator and older sandbox transport, so it cannot substitute for this gate.

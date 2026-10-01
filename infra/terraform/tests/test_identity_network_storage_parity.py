@@ -51,26 +51,13 @@ def test_monitoring_and_registry_match_foundation_policy() -> None:
     assert "7f951dda-4ed3-4680-a7ca-43fe172d538d" in acr
 
 
-def test_foundry_project_identity_can_pull_the_hosted_agent_image() -> None:
+def test_no_hosted_agent_grants_remain() -> None:
     foundry = read("infra/terraform/modules/foundry/main.tf")
     acr = read("infra/terraform/modules/acr/main.tf")
-    main = read("infra/terraform/main.tf")
 
-    assert 'output "project_principal_id"' in foundry
-    assert 'variable "foundry_project_principal_id"' in acr
-    assert 'resource "azurerm_role_assignment" "foundry_project_pull"' in acr
-    assert "principal_id       = var.foundry_project_principal_id" in acr
-    assert re.search(r"foundry_project_principal_id\s*=\s*module\.foundry\.project_principal_id", main)
-
-
-def test_foundry_project_identity_can_use_the_account_runtime() -> None:
-    foundry = read("infra/terraform/modules/foundry/main.tf")
-
-    assert "foundry_user_role" in foundry
-    assert 'resource "azurerm_role_assignment" "project_foundry_user"' in foundry
-    assert "principal_id       = azapi_resource.project.output.identity.principalId" in foundry
-    assert "scope              = azapi_resource.account.id" in foundry
-    assert "53ca6127-db72-4b80-b1b0-d745d6d5456d" in foundry
+    assert "foundry_project_principal_id" not in acr
+    assert "project_foundry_user" not in foundry
+    assert 'output "project_principal_id"' not in foundry
 
 
 def test_storage_keeps_defender_private_endpoint_and_explicit_blob_roles() -> None:

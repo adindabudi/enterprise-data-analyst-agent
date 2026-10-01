@@ -19,9 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from eda_api.analysis.admission import AdmissionRejected
+from eda_api.analysis.attempts import AttemptStatus, TaskExecutor
 from eda_api.auth.models import Principal
 from eda_api.chat.service import QueryRun
-from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.storage.inputs import InputArtifactWriter
 from eda_api.storage.query_results import QueryResultWriter
 from eda_api.storage.uploads import UploadRejected, UploadService
@@ -54,31 +54,8 @@ class NullTaskEventStore:
         return []
 
 
-class HostedTaskClient(Protocol):
-    async def start(
-        self,
-        task_id: str,
-        *,
-        user_identity: str,
-        previous_response_id: str | None = None,
-    ) -> HostedResponseAttempt: ...
-
-    async def get(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt: ...
-
-    async def cancel(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt: ...
-
-    async def close(self) -> object: ...
-
-
 TERMINAL_TASK_STATUS = frozenset(
     {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.FAILED_CANCELLATION}
-)
-FAILED_HOSTED_RESPONSES = frozenset(
-    {
-        HostedResponseStatus.COMPLETED,
-        HostedResponseStatus.FAILED,
-        HostedResponseStatus.INCOMPLETE,
-    }
 )
 logger = logging.getLogger(__name__)
 
@@ -113,7 +90,7 @@ class TaskService:
         self,
         repository: RuntimeStateRepository,
         message_repository: MessageRepository,
-        hosted_client: HostedTaskClient,
+        executor: TaskExecutor,
         events: TaskEventStore | None = None,
         query_results: QueryResultWriter | None = None,
         *,
@@ -123,7 +100,7 @@ class TaskService:
         self.repository = repository
         self.message_repository = message_repository
         self.events = events
-        self.hosted_client = hosted_client
+        self.executor = executor
         self.query_results = query_results
         self.uploads = uploads
         self.input_artifact_writer = input_artifact_writer
@@ -187,14 +164,11 @@ class TaskService:
                 )
             return task
         try:
-            attempt = await self.hosted_client.get(
-                task.active_attempt_id,
-                user_identity=self._hosted_user_identity(task),
-            )
+            attempt = await self.executor.get(task.active_attempt_id)
         except Exception:
-            logger.exception("hosted response reconciliation failed", extra={"task_id": task.id})
+            logger.exception("task attempt reconciliation failed", extra={"task_id": task.id})
             return task
-        if attempt.status is HostedResponseStatus.CANCELLED:
+        if attempt.status is AttemptStatus.CANCELLED:
             cancelling = task
             if task.status is not TaskStatus.CANCELLING:
                 cancelling = await self.repository.transition_task(
@@ -207,7 +181,7 @@ class TaskService:
                 TaskStatus.CANCELLED,
                 cancelling.checkpoint_sequence,
             )
-        if attempt.status not in FAILED_HOSTED_RESPONSES:
+        if attempt.status is not AttemptStatus.FAILED:
             return task
         return await self.repository.transition_task(task.id, TaskStatus.FAILED, task.checkpoint_sequence)
 
@@ -329,10 +303,7 @@ class TaskService:
                 return winner
             raise RuntimeStateConflict("task submission already in progress; reconciliation required")
         try:
-            attempt = await self.hosted_client.start(
-                created.id,
-                user_identity=self._hosted_user_identity(created),
-            )
+            attempt = await self.executor.start(created.id)
         except (ServiceRequestError, httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout, AdmissionRejected):
             await self.repository.release_initial_dispatch(created.id)
             raise
@@ -344,12 +315,9 @@ class TaskService:
             )
         except ValueError:
             try:
-                await self.hosted_client.cancel(
-                    attempt.id,
-                    user_identity=self._hosted_user_identity(created),
-                )
+                await self.executor.cancel(attempt.id)
             except Exception:
-                logger.exception("duplicate hosted response cancellation failed", extra={"task_id": created.id})
+                logger.exception("duplicate task attempt cancellation failed", extra={"task_id": created.id})
             winner = await self.repository.get_owned_task(created.partition(), created.id)
             if winner is None or (winner.active_attempt_id is None and winner.status not in TERMINAL_TASK_STATUS):
                 raise
@@ -381,12 +349,9 @@ class TaskService:
         )
         if before is not None and command.sequence > before.command_sequence and before.active_attempt_id is not None:
             try:
-                await self.hosted_client.cancel(
-                    before.active_attempt_id,
-                    user_identity=self._hosted_user_identity(before),
-                )
+                await self.executor.cancel(before.active_attempt_id)
             except Exception:
-                logger.exception("hosted response cancellation failed", extra={"task_id": task_id})
+                logger.exception("task attempt cancellation failed", extra={"task_id": task_id})
         return command
 
     async def resume_auth(self, partition: TaskPartition, task_id: str, receipt: str):
@@ -398,11 +363,6 @@ class TaskService:
             f"fabric-auth:{receipt}",
         )
         return command
-
-    @staticmethod
-    def _hosted_user_identity(task: TaskRecord) -> str:
-        material = f"{task.tenant_id}\0{task.owner_object_id}".encode()
-        return f"usr_{hashlib.sha256(material).hexdigest()[:32]}"
 
     @staticmethod
     def _entry(draft: EventDraft, *, stream_id: str) -> StreamEntry:

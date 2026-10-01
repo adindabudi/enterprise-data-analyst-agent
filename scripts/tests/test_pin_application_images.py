@@ -25,7 +25,6 @@ def test_api_revision_is_promoted_with_analysis_runtime_and_sandbox_settings() -
         "EDA_ANALYSIS_RUNTIME_ENABLED=true",
         "EDA_MODEL_CONTRACT_VERIFIED=true",
         "EDA_TOKENIZER_CALIBRATED=true",
-        "EDA_HOSTED_AGENT_ENABLED=true",
         "EDA_ENTRA_FEDERATION_READY=true",
         "EDA_CORE_READY=true",
     ):
@@ -45,7 +44,6 @@ def test_script_verifies_promoted_api_readiness_environment() -> None:
         "EDA_ANALYSIS_RUNTIME_ENABLED",
         "EDA_MODEL_CONTRACT_VERIFIED",
         "EDA_TOKENIZER_CALIBRATED",
-        "EDA_HOSTED_AGENT_ENABLED",
         "EDA_ENTRA_FEDERATION_READY",
         "EDA_CORE_READY",
     ):

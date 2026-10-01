@@ -13,20 +13,6 @@ def test_worker_health_is_content_free() -> None:
     assert health() == {"status": "alive", "component": "worker"}
 
 
-def test_run_command_starts_the_hosted_responses_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    sentinel_settings = object()
-    calls: list[object] = []
-
-    monkeypatch.setattr(worker_main, "configure_telemetry", lambda: None)
-    monkeypatch.setattr(worker_main.WorkerSettings, "model_validate", lambda value: sentinel_settings)
-    monkeypatch.setattr(worker_main, "run_hosted_server", calls.append)
-    monkeypatch.setattr(sys, "argv", ["eda-worker", "run"])
-
-    worker_main.main()
-
-    assert calls == [sentinel_settings]
-
-
 def test_cleanup_cli_accepts_scheduled_arguments_and_exits_nonzero_on_partial_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

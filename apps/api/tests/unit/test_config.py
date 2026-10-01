@@ -18,7 +18,6 @@ def settings_values(**overrides: object) -> dict[str, object]:
         "redis_url": "redis://127.0.0.1:6379/0",
         "foundry_project_endpoint": "https://example.services.ai.azure.com/api/projects/example",
         "foundry_model_deployment": "analysis-opus",
-        "hosted_agent_name": "enterprise-data-analyst-long-job",
         "managed_identity_client_id": "33333333-3333-3333-3333-333333333333",
         "fabric_enabled": False,
         "fabric_provider": None,
@@ -47,10 +46,6 @@ def test_settings_exposes_authority_and_redirect_uri() -> None:
     assert settings.cosmos_auth_container == "auth"
     assert settings.blob_quarantine_container == "quarantine"
     assert settings.blob_sessions_container == "sessions"
-    assert str(settings.hosted_responses_endpoint) == (
-        "https://example.services.ai.azure.com/api/projects/example/agents/"
-        "enterprise-data-analyst-long-job/endpoint/protocols/openai/responses"
-    )
 
 
 def test_development_selects_terra_without_an_independent_base_model_override() -> None:
@@ -101,7 +96,7 @@ def test_development_requires_identity_credential() -> None:
         Settings.model_validate(settings_values(managed_identity_client_id=None))
 
 
-def test_powerbi_pack_is_rejected_by_the_hosted_agent_topology() -> None:
+def test_powerbi_pack_is_rejected_in_this_release() -> None:
     with pytest.raises(ValidationError, match="Power BI Project Pack is unavailable"):
         Settings.model_validate(settings_values(powerbi_project_enabled=True))
 

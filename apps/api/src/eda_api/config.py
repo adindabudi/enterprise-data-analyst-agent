@@ -43,10 +43,6 @@ class Settings(BaseSettings):
     degraded_stream_buffer_bytes: int = Field(default=262144, ge=65536, le=262144)
     foundry_project_endpoint: AnyHttpUrl
     foundry_model_deployment: str = Field(min_length=1, max_length=128)
-    hosted_agent_name: str = Field(
-        default="enterprise-data-analyst-long-job",
-        pattern=r"^[a-z][a-z0-9-]{2,62}$",
-    )
     eda_model_profile: Literal["gpt-5.6-terra-medium-v1"] = Field(
         default="gpt-5.6-terra-medium-v1",
         validation_alias=AliasChoices("eda_model_profile", "EDA_MODEL_PROFILE"),
@@ -57,8 +53,6 @@ class Settings(BaseSettings):
     sandbox_image_digest: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
     model_contract_verified: bool = False
     tokenizer_calibrated: bool = False
-    # Only drains tasks the hosted agent already owns; no new task is sent to it.
-    hosted_agent_enabled: bool = False
     analysis_runtime_enabled: bool = False
     analysis_max_active_per_replica: int = Field(default=2, ge=1, le=8)
     analysis_deployment_limit: int = Field(default=5, ge=1, le=64)
@@ -170,7 +164,7 @@ class Settings(BaseSettings):
         if self.foundry_hosting != "azure":
             raise ValueError("GPT-5.6 Terra requires Azure hosting")
         if self.powerbi_project_enabled:
-            raise ValueError("Power BI Project Pack is unavailable with the Hosted Agent topology")
+            raise ValueError("Power BI Project Pack is unavailable in this release")
         if self.core_ready and (
             not self.model_contract_verified
             or not self.tokenizer_calibrated
@@ -181,11 +175,6 @@ class Settings(BaseSettings):
         if self.analysis_deployment_limit < self.analysis_max_active_per_replica:
             raise ValueError("analysis deployment limit must cover one replica's concurrency")
         return self
-
-    @cached_property
-    def hosted_responses_endpoint(self) -> str:
-        project_endpoint = str(self.foundry_project_endpoint).rstrip("/")
-        return f"{project_endpoint}/agents/{self.hosted_agent_name}/endpoint/protocols/openai/responses"
 
     @cached_property
     def authority(self) -> str:

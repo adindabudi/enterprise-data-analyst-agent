@@ -50,7 +50,7 @@ def http_pipeline(settings: Settings, msal_client: object) -> Iterator[HttpPipel
         runtime_repository_override=pipeline.runtime,
         event_store_override=NullTaskEventStore(),
         message_repository_override=pipeline.messages,
-        hosted_client_override=pipeline.hosted,
+        task_executor_override=pipeline.executor,
         artifact_catalog_override=CosmosBlobArtifactCatalog(pipeline.workspace, pipeline.blobs),
     )
     application.state.input_artifact_writer_override = pipeline.writer
@@ -106,7 +106,7 @@ def test_task_submission_maps_authoritative_scan_states(
 
     assert response.status_code == expected_status
     assert response.json()["code"] == code
-    assert env.pipeline.hosted.started == []
+    assert env.pipeline.executor.started == []
     assert env.pipeline.quarantine.downloads == 0
 
 
@@ -148,7 +148,7 @@ def test_task_submission_hides_foreign_session_uploads(http_pipeline: HttpPipeli
     response = submit(env, message_id, [foreign.id])
 
     assert response.status_code == 404
-    assert env.pipeline.hosted.started == []
+    assert env.pipeline.executor.started == []
     assert env.pipeline.quarantine.downloads == 0
 
 
@@ -165,7 +165,7 @@ def test_task_input_id_contract_is_bounded_and_strict(http_pipeline: HttpPipelin
     )
 
     assert response.status_code == 422
-    assert env.pipeline.hosted.started == []
+    assert env.pipeline.executor.started == []
 
 
 def test_task_creation_rechecks_the_uploaded_digest(http_pipeline: HttpPipeline) -> None:
@@ -177,7 +177,7 @@ def test_task_creation_rechecks_the_uploaded_digest(http_pipeline: HttpPipeline)
 
     assert response.status_code == 422
     assert response.json()["code"] == "upload_verification_failed"
-    assert env.pipeline.hosted.started == []
+    assert env.pipeline.executor.started == []
 
 
 def test_partial_promotion_failure_returns_retriable_error(http_pipeline: HttpPipeline) -> None:
@@ -187,11 +187,11 @@ def test_partial_promotion_failure_returns_retriable_error(http_pipeline: HttpPi
 
     failed = submit(env, message_id, [upload_id])
     assert failed.status_code == 503
-    assert env.pipeline.hosted.started == []
+    assert env.pipeline.executor.started == []
     retried = submit(env, message_id, [upload_id])
 
     assert retried.status_code == 202
-    assert len(env.pipeline.hosted.started) == 1
+    assert len(env.pipeline.executor.started) == 1
 
 
 def test_task_idempotency_includes_upload_selection(http_pipeline: HttpPipeline) -> None:
@@ -206,7 +206,7 @@ def test_task_idempotency_includes_upload_selection(http_pipeline: HttpPipeline)
     assert first.status_code == retry.status_code == 202
     assert first.json() == retry.json()
     assert changed.status_code == 409
-    assert len(env.pipeline.hosted.started) == 1
+    assert len(env.pipeline.executor.started) == 1
 
 
 def test_input_artifacts_remain_owner_scoped(http_pipeline: HttpPipeline) -> None:

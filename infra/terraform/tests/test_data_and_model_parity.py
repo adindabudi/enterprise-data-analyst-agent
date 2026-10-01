@@ -61,11 +61,8 @@ def test_foundry_is_terra_only_with_no_partner_model_surface() -> None:
     assert "useMicrosoftManagedNetwork = false" in foundry
     assert "agent_subnet_id" in main
     assert 'variable "web_identity_principal_id"' in foundry
-    assert "eed3b665-ab3a-47b6-8f48-c9382fb1dad6" in foundry
-    assert "UserIdentityImpersonation/action" in foundry
-    assert 'resource "azurerm_role_assignment" "web_foundry_agent_consumer"' in foundry
-    assert 'resource "azurerm_role_assignment" "web_hosted_user_impersonation"' in foundry
-    assert "scope              = azapi_resource.project.id" in foundry
+    assert "UserIdentityImpersonation" not in foundry
+    assert 'resource "azurerm_role_assignment" "web_cognitive_services_user"' in foundry
     assert re.search(
         r"web_identity_principal_id\s*=\s*module\.identities\.web_identity_principal_id",
         main,

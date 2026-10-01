@@ -30,10 +30,6 @@ variable "session_init_identity_principal_id" {
   type = string
 }
 
-variable "foundry_project_principal_id" {
-  type = string
-}
-
 locals {
   acr_pull_role_definition_id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d"
 }
@@ -63,13 +59,6 @@ resource "azurerm_role_assignment" "worker_pull" {
 
 resource "azurerm_role_assignment" "session_init_pull" {
   principal_id       = var.session_init_identity_principal_id
-  principal_type     = "ServicePrincipal"
-  role_definition_id = local.acr_pull_role_definition_id
-  scope              = azurerm_container_registry.this.id
-}
-
-resource "azurerm_role_assignment" "foundry_project_pull" {
-  principal_id       = var.foundry_project_principal_id
   principal_type     = "ServicePrincipal"
   role_definition_id = local.acr_pull_role_definition_id
   scope              = azurerm_container_registry.this.id

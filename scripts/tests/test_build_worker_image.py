@@ -27,5 +27,5 @@ def test_worker_image_is_remote_built_scanned_and_persisted_by_digest() -> None:
     assert "syft" in source
     assert 'azd env set EDA_WORKER_IMAGE "$image"' in source
     assert 'azd env set EDA_WORKER_IMAGE_DIGEST "$digest"' in source
-    assert 'azd env set AZD_AGENT_SKIP_ACR "true"' in source
+    assert "AZD_AGENT_SKIP_ACR" not in source
     assert "docker build" not in source

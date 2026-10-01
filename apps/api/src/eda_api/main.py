@@ -17,7 +17,8 @@ from eda_runtime_state.tasks import CosmosRuntimeStateRepository, RuntimeStateRe
 from fastapi import APIRouter, FastAPI, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from eda_api.analysis.client import RoutingTaskClient
+from eda_api.analysis.attempts import TaskExecutor
+from eda_api.analysis.client import DisabledAnalysisClient
 from eda_api.analysis.runtime import InProcessAnalysis, build_in_process_analysis
 from eda_api.analysis.source_context import SourceSnapshotContextProvider
 from eda_api.analysis.source_tools import SourceTools
@@ -34,7 +35,6 @@ from eda_api.fabric_auth.ontology import OntologyEndpointProbe
 from eda_api.fabric_auth.routes import router as fabric_auth_router
 from eda_api.fabric_auth.routes import source_router as fabric_source_router
 from eda_api.fabric_auth.snapshot import SnapshotUnavailableError, read_snapshot
-from eda_api.hosted_responses import HostedResponsesClient
 from eda_api.problems import install_problem_handlers
 from eda_api.readiness.models import (
     DocumentFeatureState,
@@ -55,7 +55,7 @@ from eda_api.storage.query_results import CosmosBlobQueryResultWriter, QueryResu
 from eda_api.storage.todos import CosmosSessionTodoReader, SessionTodoReader
 from eda_api.storage.uploads import AzureBlobStore, CosmosUploadRepository, UploadService
 from eda_api.storage.workspace import CosmosWorkspaceRepository, WorkspaceRepository
-from eda_api.task_service import HostedTaskClient, TaskEventStore, TaskService
+from eda_api.task_service import TaskEventStore, TaskService
 from eda_api.telemetry import configure_logging, configure_telemetry
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     database = None
     blob_service = None
     redis_client = None
-    hosted_client = None
+    task_executor: TaskExecutor | None = None
     fabric_key_wrapper = None
     fabric_auth_client = None
     fabric_access_token_client = None
@@ -120,7 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         runtime_repository = app.state.runtime_repository_override
         event_store = app.state.event_store_override
         message_repository = app.state.message_repository_override
-        hosted_client = app.state.hosted_client_override
+        task_executor = app.state.task_executor_override
         fabric_auth_service = app.state.fabric_auth_service_override
         used_managed_resources = False
         if (
@@ -213,22 +213,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             if used_managed_resources:
                 raise ValueError("message repository is unavailable")
             message_repository = InMemoryMessageRepository()
-        if hosted_client is None and (config.hosted_agent_enabled or not config.analysis_runtime_enabled):
-            if credential is None:
-                from azure.identity.aio import DefaultAzureCredential
-
-                if config.managed_identity_client_id is None:
-                    credential = DefaultAzureCredential()
-                else:
-                    credential = DefaultAzureCredential(
-                        managed_identity_client_id=str(config.managed_identity_client_id)
-                    )
-            hosted_client = HostedResponsesClient(config.hosted_responses_endpoint, credential)
         # Source tools are assembled once the Fabric adapters exist; the runtime is built after that.
         analysis_tools: list[Any] = []
         analysis_context: list[Any] = []
-        task_client: HostedTaskClient | None = cast(HostedTaskClient | None, hosted_client)
-        if config.analysis_runtime_enabled:
+        if task_executor is None and not config.analysis_runtime_enabled:
+            task_executor = DisabledAnalysisClient()
+        if task_executor is None:
             if database is None:
                 raise ValueError("the analysis runtime requires the managed Cosmos database")
             analysis = build_in_process_analysis(
@@ -239,9 +229,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 source_tools=lambda: analysis_tools,
                 source_context=lambda: analysis_context,
             )
-            task_client = RoutingTaskClient(analysis.client, legacy=task_client)
-        if task_client is None:
-            raise ValueError("no task execution client is configured")
+            task_executor = analysis.client
         msal = app.state.msal_override or MsalAuthClient(config)
         app.state.settings = config
         app.state.msal_client = msal
@@ -254,12 +242,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.runtime_repository = runtime_repository
         app.state.event_store = event_store
         app.state.message_repository = message_repository
-        app.state.hosted_client = task_client
+        app.state.task_executor = task_executor
         app.state.analysis = analysis
         app.state.task_service = TaskService(
             cast(RuntimeStateRepository, runtime_repository),
             cast(MessageRepository, message_repository),
-            task_client,
+            task_executor,
             cast(TaskEventStore | None, event_store),
             cast(QueryResultWriter | None, query_result_writer),
             uploads=cast(UploadService, uploads),
@@ -443,8 +431,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             fabric_sync_credential.close()
         if fabric_key_wrapper is not None:
             await fabric_key_wrapper.close()
-        if hosted_client is not None:
-            await hosted_client.close()
+        if task_executor is not None:
+            await task_executor.close()
         if msal is not None:
             msal.close()
         if blob_service is not None:
@@ -467,7 +455,7 @@ def create_app(
     runtime_repository_override: RuntimeStateRepository | None = None,
     event_store_override: TaskEventStore | None = None,
     message_repository_override: MessageRepository | None = None,
-    hosted_client_override: HostedTaskClient | None = None,
+    task_executor_override: TaskExecutor | None = None,
     fabric_auth_service_override: FabricAuthCoordinator | None = None,
     fabric_readiness_override: FabricPackStatus | None = None,
     document_readiness_override: FabricPackStatus | None = None,
@@ -491,7 +479,7 @@ def create_app(
     app.state.runtime_repository_override = runtime_repository_override
     app.state.event_store_override = event_store_override
     app.state.message_repository_override = message_repository_override
-    app.state.hosted_client_override = hosted_client_override
+    app.state.task_executor_override = task_executor_override
     app.state.fabric_auth_service_override = fabric_auth_service_override
     app.state.fabric_readiness_override = fabric_readiness_override
     app.state.document_readiness_override = document_readiness_override

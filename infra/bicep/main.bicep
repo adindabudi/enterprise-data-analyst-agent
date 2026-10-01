@@ -51,9 +51,8 @@ var tags = {
   managedBy: 'bicep'
 }
 var suffix = take(uniqueString(subscription().id, environmentName), 8)
-var hostedUserImpersonationRoleName = guid(subscription().id, 'eda-hosted-agent-user-identity-impersonation')
-var hostedPowerBiProjectEnabled = powerBiProjectEnabled
-  ? fail('Power BI Project Pack requires the retired DTS runtime and is unavailable in the Hosted Agent topology.')
+var powerBiProjectGuard = powerBiProjectEnabled
+  ? fail('Power BI Project Pack requires the retired DTS runtime and is unavailable in this release.')
   : false
 var configurationHash = uniqueString(
   profile,
@@ -95,28 +94,6 @@ resource resourceGroup 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   tags: union(tags, {
     configurationHash: configurationHash
   })
-}
-
-resource hostedUserImpersonationRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
-  name: hostedUserImpersonationRoleName
-  properties: {
-    roleName: 'EDA Hosted Agent User Identity Impersonation'
-    description: 'Lets the trusted API isolate Hosted Agent state by opaque product user identity.'
-    type: 'CustomRole'
-    permissions: [
-      {
-        actions: []
-        notActions: []
-        dataActions: [
-          'Microsoft.CognitiveServices/accounts/AIServices/agents/endpoints/UserIdentityImpersonation/action'
-        ]
-        notDataActions: []
-      }
-    ]
-    assignableScopes: [
-      subscription().id
-    ]
-  }
 }
 
 module naming 'modules/naming.bicep' = {
@@ -172,7 +149,6 @@ module containerRegistry 'modules/container-registry.bicep' = {
     webIdentityPrincipalId: identities.outputs.webIdentityPrincipalId
     workerIdentityPrincipalId: identities.outputs.workerIdentityPrincipalId
     sessionInitIdentityPrincipalId: identities.outputs.sessionInitIdentityPrincipalId
-    foundryProjectPrincipalId: foundry.outputs.projectPrincipalId
   }
 }
 
@@ -263,7 +239,6 @@ module foundry 'modules/foundry.bicep' = {
     agentSubnetId: network.outputs.foundryAgentSubnetId
     webIdentityPrincipalId: identities.outputs.webIdentityPrincipalId
     workerIdentityPrincipalId: identities.outputs.workerIdentityPrincipalId
-    userImpersonationRoleDefinitionId: hostedUserImpersonationRole.id
     modelProfile: modelProfile
     modelCapacity: modelCapacity
   }
@@ -290,12 +265,11 @@ module containerApps 'modules/container-apps.bicep' = {
     environmentName: environmentName
     foundryModelDeployment: foundry.outputs.deploymentName
     foundryProjectEndpoint: foundry.outputs.projectEndpoint
-    hostedAgentName: 'enterprise-data-analyst-long-job'
     location: location
     logAnalyticsSharedKey: monitoring.outputs.logAnalyticsSharedKey
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     modelProfile: modelProfile
-    powerBiProjectEnabled: hostedPowerBiProjectEnabled
+    powerBiProjectEnabled: powerBiProjectGuard
     fabricEnabled: fabricEnabled
     fabricProvider: fabricProvider
     fabricTenantId: fabricTenantId

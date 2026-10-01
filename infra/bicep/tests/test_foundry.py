@@ -113,23 +113,13 @@ def test_foundry_outputs_expose_project_and_account_endpoints_with_deployment_na
     )
 
 
-def test_foundry_project_identity_can_pull_the_hosted_agent_image() -> None:
+def test_no_hosted_agent_grants_remain() -> None:
     foundry = (ROOT / "infra/bicep/modules/foundry.bicep").read_text(encoding="utf-8")
     registry = (ROOT / "infra/bicep/modules/container-registry.bicep").read_text(encoding="utf-8")
     main = (ROOT / "infra/bicep/main.bicep").read_text(encoding="utf-8")
 
-    assert "output projectPrincipalId string = project.identity.principalId" in foundry
-    assert "param foundryProjectPrincipalId string" in registry
-    assert "resource foundryProjectAcrPull" in registry
-    assert "principalId: foundryProjectPrincipalId" in registry
-    assert ACR_PULL_ROLE_ID in registry
-    assert "foundryProjectPrincipalId: foundry.outputs.projectPrincipalId" in main
-
-
-def test_foundry_project_identity_can_use_the_account_runtime() -> None:
-    foundry = (ROOT / "infra/bicep/modules/foundry.bicep").read_text(encoding="utf-8")
-
-    assert "resource projectFoundryUser" in foundry
-    assert "principalId: project.identity.principalId" in foundry
-    assert FOUNDRY_USER_ROLE_ID in foundry
-    assert "scope: account" in foundry
+    assert "foundryProjectAcrPull" not in registry
+    assert "projectFoundryUser" not in foundry
+    assert "webFoundryAgentConsumer" not in foundry
+    assert "UserIdentityImpersonation" not in main + foundry
+    assert "resource webCognitiveServicesUser" in foundry

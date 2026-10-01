@@ -1,4 +1,4 @@
-"""Dispatch through the in-process runtime: durable before queued, and legacy tasks left where they are."""
+"""Dispatch through the in-process runtime: durable before queued, and retired attempts settled as failed."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from uuid import UUID
 
 import pytest
 from eda_api.analysis.admission import AdmissionRejected
-from eda_api.analysis.client import LocalAnalysisClient, RoutingTaskClient
+from eda_api.analysis.attempts import AttemptStatus
+from eda_api.analysis.client import LocalAnalysisClient
 from eda_api.analysis.supervisor import AnalysisSupervisor, SupervisorLimits, local_attempt_id
-from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.task_service import TaskService
 from eda_contracts.tasks import TaskStatus
 from eda_runtime_state.ledger import ExecutionLedgerStore, InMemoryLedgerContainer
@@ -58,37 +58,18 @@ async def _task(repository: InMemoryRuntimeStateRepository, suffix: str) -> Task
     )
 
 
-class LegacyClient:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, str]] = []
-
-    async def start(self, task_id: str, *, user_identity: str, previous_response_id: str | None = None):
-        raise AssertionError("no new task may be sent to the hosted agent")
-
-    async def get(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        self.calls.append(("get", response_id))
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.COMPLETED)
-
-    async def cancel(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        self.calls.append(("cancel", response_id))
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.CANCELLED)
-
-    async def close(self) -> None:
-        self.calls.append(("close", ""))
-
-
 @pytest.mark.asyncio
 async def test_start_persists_the_attempt_before_the_task_is_queued() -> None:
     repository = InMemoryRuntimeStateRepository()
     supervisor = await _supervisor(repository)
     task = await _task(repository, "d1")
 
-    attempt = await LocalAnalysisClient(supervisor, repository).start(task.id, user_identity="usr_x")
+    attempt = await LocalAnalysisClient(supervisor, repository).start(task.id)
 
     stored = await repository.resolve_task(task.id)
     assert stored is not None
     assert attempt.id == local_attempt_id(task.id) == stored.active_attempt_id
-    assert attempt.status is HostedResponseStatus.QUEUED
+    assert attempt.status is AttemptStatus.QUEUED
     assert supervisor.queued_task_ids() == (task.id,)
     # The recovery index sees it too, so a crash before it runs cannot lose it.
     assert await repository.active_task_ids("run_") == [task.id]
@@ -99,11 +80,11 @@ async def test_a_rejected_admission_persists_nothing() -> None:
     repository = InMemoryRuntimeStateRepository()
     supervisor = await _supervisor(repository, queue_depth=1)
     client = LocalAnalysisClient(supervisor, repository)
-    await client.start((await _task(repository, "d2")).id, user_identity="usr_x")
+    await client.start((await _task(repository, "d2")).id)
     rejected = await _task(repository, "d3")
 
     with pytest.raises(AdmissionRejected):
-        await client.start(rejected.id, user_identity="usr_x")
+        await client.start(rejected.id)
 
     stored = await repository.resolve_task(rejected.id)
     assert stored is not None and stored.active_attempt_id is None
@@ -116,7 +97,7 @@ async def test_task_service_releases_the_dispatch_claim_when_admission_is_reject
     messages = InMemoryMessageRepository()
     supervisor = await _supervisor(repository, queue_depth=1)
     await supervisor.stop()
-    service = TaskService(repository, messages, RoutingTaskClient(LocalAnalysisClient(supervisor, repository)))
+    service = TaskService(repository, messages, LocalAnalysisClient(supervisor, repository))
     message = await messages.append_user(PARTITION, "Summarise the rooms", "message-00000001")
 
     with pytest.raises(AdmissionRejected):
@@ -134,31 +115,40 @@ async def _task_ids(repository: InMemoryRuntimeStateRepository):
 
 
 @pytest.mark.asyncio
-async def test_legacy_attempts_stay_with_the_hosted_agent_and_local_ones_never_reach_it() -> None:
+async def test_an_attempt_from_the_retired_hosted_runtime_reports_failed() -> None:
     repository = InMemoryRuntimeStateRepository()
     supervisor = await _supervisor(repository)
-    legacy = LegacyClient()
-    router = RoutingTaskClient(LocalAnalysisClient(supervisor, repository), legacy=legacy)
+    client = LocalAnalysisClient(supervisor, repository)
 
-    hosted = await router.get("resp_legacy000001", user_identity="usr_x")
-    await router.cancel("resp_legacy000001", user_identity="usr_x")
-    local = await router.get(local_attempt_id("task_000000000001"), user_identity="usr_x")
-    await router.cancel(local_attempt_id("task_000000000001"), user_identity="usr_x")
-    await router.close()
+    retired = await client.get("resp_legacy000001")
+    cancelled = await client.cancel("resp_legacy000001")
+    local = await client.get(local_attempt_id("task_000000000001"))
 
-    assert hosted.status is HostedResponseStatus.COMPLETED
+    assert retired.status is cancelled.status is AttemptStatus.FAILED
     # The supervisor owns its tasks' recovery, so reconciliation must never settle them from outside.
-    assert local.status is HostedResponseStatus.IN_PROGRESS
-    assert legacy.calls == [("get", "resp_legacy000001"), ("cancel", "resp_legacy000001"), ("close", "")]
+    assert local.status is AttemptStatus.IN_PROGRESS
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_fails_a_task_left_with_the_retired_hosted_runtime() -> None:
+    repository = InMemoryRuntimeStateRepository()
+    supervisor = await _supervisor(repository)
+    service = TaskService(repository, InMemoryMessageRepository(), LocalAnalysisClient(supervisor, repository))
+    task = await _task(repository, "d5")
+    await repository.replace_active_attempt(task.id, "resp_legacy000002", expected_attempt_id=None)
+    current = await repository.resolve_task(task.id)
+    assert current is not None
+
+    reconciled = await service.reconcile_abandoned_task(current)
+
+    assert reconciled.status is TaskStatus.FAILED
 
 
 @pytest.mark.asyncio
 async def test_reconciliation_leaves_a_local_task_to_its_supervisor() -> None:
     repository = InMemoryRuntimeStateRepository()
     supervisor = await _supervisor(repository)
-    service = TaskService(
-        repository, InMemoryMessageRepository(), RoutingTaskClient(LocalAnalysisClient(supervisor, repository))
-    )
+    service = TaskService(repository, InMemoryMessageRepository(), LocalAnalysisClient(supervisor, repository))
     task = await _task(repository, "d4")
     await repository.replace_active_attempt(task.id, local_attempt_id(task.id), expected_attempt_id=None)
     current = await repository.resolve_task(task.id)

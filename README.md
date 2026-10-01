@@ -1,10 +1,10 @@
 # Enterprise Data Analyst
 
-A private analyst workspace that runs in your own Azure subscription. Ask a question in chat, and a Foundry Hosted workflow plans the work, runs code in an isolated sandbox, validates what it produced, and publishes the file for you to download.
+A private analyst workspace that runs in your own Azure subscription. Ask a question in chat, and the analyst runtime in the API plans the work, runs code in an isolated sandbox, validates what it produced, and publishes the file for you to download.
 
 It is built on the Microsoft Agent Framework, Azure Container Apps, and storage the deployment owns. There is no shared backend and no other tenant's data.
 
-- **Two speeds.** Short questions are answered inline. Anything needing code, a file, or work that must survive a disconnect goes to a resilient background response you can steer or cancel.
+- **One durable task path.** Every request runs as a task in the API's analyst runtime. A task survives a closed browser or an API restart, and you can steer or cancel it while it runs.
 - **Files you can open.** Workbooks, reports, and charts are generated in the sandbox and checked by a deterministic validator. Nothing is published until its validator passes.
 - **Optional packs, off by default.** Fabric and Office documents stay disabled until you enable them and their acceptance evidence passes.
 
@@ -28,7 +28,7 @@ Run `make source-notices` after changing dependencies to regenerate [THIRD_PARTY
 
 You need an Azure subscription, an Entra tenant where you can register an application, and Foundry quota for `gpt-5.6-terra` in your region.
 
-Add to the local toolchain above: Azure CLI 2.80+, azd 1.31.1+, the `azure.ai.agents` azd extension 1.0.0-beta.11+, Docker, `jq`, and the Bicep extension (`az bicep install`). Application images are built remotely in ACR, including from ARM64 hosts.
+Add to the local toolchain above: Azure CLI 2.80+, azd 1.31.1+, Docker, `jq`, and the Bicep extension (`az bicep install`). Application images are built remotely in ACR, including from ARM64 hosts.
 
 The image build hooks also require [Syft](https://github.com/anchore/syft) and [Trivy](https://github.com/aquasecurity/trivy) on your PATH for SBOM generation and vulnerability scanning. The full release gate pins Syft to 1.49.0; see the [release checklist](docs/runbooks/release-checklist.md) for the remaining release tools.
 
@@ -71,7 +71,7 @@ Provisioning runs `scripts/doctor.sh` before anything is created. It checks tool
 
 The worker and API images embed a model contract from `.artifacts/`, and that contract is generated against a live Foundry deployment. On a first deployment, provisioning stops at the image build until those artifacts exist. Generate them with `make model-contract` using the Foundry values from your azd environment, then rerun `azd up`. [Model compatibility](docs/runbooks/model-compatibility.md) lists the required inputs.
 
-The rest — resource group, Foundry agent endpoint and identity, image digests, and Sandbox group coordinates — is written back into your azd environment by the deployment hooks. Do not set those by hand.
+The rest — resource group, Foundry project endpoint, image digests, and Sandbox group coordinates — is written back into your azd environment by the deployment hooks. Do not set those by hand.
 
 ### Confirm it worked
 
@@ -117,16 +117,16 @@ What drives cost, and which levers to pull first, is in [cost controls](docs/ope
 
 ## Repository layout
 
-| Path               | What lives there                                                    |
-| ------------------ | ------------------------------------------------------------------- |
-| `apps/api`         | FastAPI backend: auth, sessions, chat streaming, artifact downloads |
-| `apps/web`         | React workspace built with Fluent UI                                |
-| `services/worker`  | Hosted workflow, agent harness, tools, cleanup and acceptance jobs  |
-| `services/sandbox` | Task-scoped isolated execution and artifact validation              |
-| `packages/`        | Shared contracts, artifact validators, provenance, Fabric auth      |
-| `infra/`           | Bicep and Terraform, kept at parity                                 |
-| `scripts/`         | Preflight doctors, acceptance gates, contract publication           |
-| `docs/runbooks`    | Operational procedures                                              |
+| Path               | What lives there                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| `apps/api`         | FastAPI backend: auth, sessions, task streaming, the analyst runtime and its supervisor, downloads |
+| `apps/web`         | React workspace built with Fluent UI                                                               |
+| `services/worker`  | Analyst library (agent harness, tools, task lifecycle) and maintenance jobs                        |
+| `services/sandbox` | Task-scoped isolated execution and artifact validation                                             |
+| `packages/`        | Shared contracts, artifact validators, provenance, Fabric auth                                     |
+| `infra/`           | Bicep and Terraform, kept at parity                                                                |
+| `scripts/`         | Preflight doctors, acceptance gates, contract publication                                          |
+| `docs/runbooks`    | Operational procedures                                                                             |
 
 The dev loop and contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 

@@ -14,7 +14,7 @@ from eda_runtime_state.tasks import InMemoryRuntimeStateRepository
 pytestmark = pytest.mark.integration
 
 
-class _FakeHostedClient:
+class _FakeExecutor:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
@@ -40,8 +40,8 @@ async def test_resume_auth_persists_for_the_next_phase_boundary_and_is_idempoten
     )
     repository = InMemoryRuntimeStateRepository()
     await repository.create_task(task, "request-resume-auth")
-    hosted = _FakeHostedClient()
-    service = TaskService(repository, InMemoryMessageRepository(), hosted)  # type: ignore[arg-type]
+    executor = _FakeExecutor()
+    service = TaskService(repository, InMemoryMessageRepository(), executor)  # type: ignore[arg-type]
 
     first = await service.resume_auth(task.partition(), task.id, "receipt-abc123")
     second = await service.resume_auth(task.partition(), task.id, "receipt-abc123")
@@ -50,4 +50,4 @@ async def test_resume_auth_persists_for_the_next_phase_boundary_and_is_idempoten
     assert first.id == second.id
     assert first.kind is CommandKind.AUTH_RESUMED
     assert [command.kind for command in pending] == [CommandKind.AUTH_RESUMED]
-    assert hosted.calls == []
+    assert executor.calls == []

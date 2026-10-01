@@ -84,7 +84,6 @@ module "acr" {
   web_identity_principal_id          = module.identities.web_identity_principal_id
   worker_identity_principal_id       = module.identities.worker_identity_principal_id
   session_init_identity_principal_id = module.identities.session_init_identity_principal_id
-  foundry_project_principal_id       = module.foundry.project_principal_id
 }
 
 module "storage" {

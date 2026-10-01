@@ -23,13 +23,13 @@ def test_bicep_and_terraform_default_powerbi_project_to_disabled() -> None:
     assert "powerbi_project_models_json" not in production
 
 
-def test_hosted_agent_topology_rejects_the_dts_bound_powerbi_pack() -> None:
+def test_the_dts_bound_powerbi_pack_is_rejected() -> None:
     bicep = read("infra/bicep/main.bicep")
     terraform_variables = read("infra/terraform/variables.tf")
 
     message = "Power BI Project Pack requires the retired DTS runtime"
     assert message in bicep
-    assert "powerBiProjectEnabled: hostedPowerBiProjectEnabled" in bicep
+    assert "powerBiProjectEnabled: powerBiProjectGuard" in bicep
     assert "condition     = !var.powerbi_project_enabled" in terraform_variables
     assert message in terraform_variables
 

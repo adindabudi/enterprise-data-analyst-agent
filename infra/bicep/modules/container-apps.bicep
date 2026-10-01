@@ -14,7 +14,6 @@ param entraTenantId string
 param environmentName string
 param foundryModelDeployment string
 param foundryProjectEndpoint string
-param hostedAgentName string
 param deploymentId string
 param documentsEnabled bool
 param fabricEnabled bool
@@ -180,14 +179,6 @@ resource api 'Microsoft.App/containerApps@2026-01-01' = {
             {
               name: 'EDA_FOUNDRY_MODEL_DEPLOYMENT'
               value: foundryModelDeployment
-            }
-            {
-              name: 'EDA_HOSTED_AGENT_NAME'
-              value: hostedAgentName
-            }
-            {
-              name: 'EDA_HOSTED_AGENT_ENABLED'
-              value: 'true'
             }
             {
               name: 'EDA_ANALYSIS_RUNTIME_ENABLED'

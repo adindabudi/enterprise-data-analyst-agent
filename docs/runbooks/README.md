@@ -4,18 +4,18 @@ Start here when something breaks or when you are about to change the deployment.
 
 ## Find it by symptom
 
-| What you are seeing                             | Go to                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------ |
-| Users cannot sign in, or sign-in loops          | [entra-auth.md](entra-auth.md)                               |
-| Live updates stall, chat feels stuck            | [redis-degraded-streaming.md](redis-degraded-streaming.md)   |
-| Redis is down                                   | [redis-outage.md](redis-outage.md)                           |
-| Analyses stop progressing or never finish       | [hosted-responses-recovery.md](hosted-responses-recovery.md) |
-| Code execution fails, artifacts never appear    | [sandbox-failure.md](sandbox-failure.md)                     |
-| An uploaded file is stuck or rejected           | [upload-quarantine.md](upload-quarantine.md)                 |
-| Data loss, or you need a point-in-time copy     | [storage-restore.md](storage-restore.md)                     |
-| The model rejects requests, or quota errors     | [model-quota.md](model-quota.md)                             |
-| A deployment behaves worse after a model change | [model-compatibility.md](model-compatibility.md)             |
-| The bad release is live and you need it gone    | [rollback.md](rollback.md)                                   |
+| What you are seeing                             | Go to                                                      |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| Users cannot sign in, or sign-in loops          | [entra-auth.md](entra-auth.md)                             |
+| Live updates stall, chat feels stuck            | [redis-degraded-streaming.md](redis-degraded-streaming.md) |
+| Redis is down                                   | [redis-outage.md](redis-outage.md)                         |
+| Analyses stop progressing or never finish       | [analysis-recovery.md](analysis-recovery.md)               |
+| Code execution fails, artifacts never appear    | [sandbox-failure.md](sandbox-failure.md)                   |
+| An uploaded file is stuck or rejected           | [upload-quarantine.md](upload-quarantine.md)               |
+| Data loss, or you need a point-in-time copy     | [storage-restore.md](storage-restore.md)                   |
+| The model rejects requests, or quota errors     | [model-quota.md](model-quota.md)                           |
+| A deployment behaves worse after a model change | [model-compatibility.md](model-compatibility.md)           |
+| The bad release is live and you need it gone    | [rollback.md](rollback.md)                                 |
 
 ## Before you change the deployment
 
@@ -33,7 +33,7 @@ Start here when something breaks or when you are about to change the deployment.
 Things that surprise people. Most are configuration rather than defects, but the first one blocks document tools.
 
 **Document tools disappear after an image rebuild.**
-Startup checks the feature record against the deployed Hosted Agent and sandbox image digests. Republish the contract for the new digests, or set `DOCUMENTS_ENABLED=false` until you can. See [document-pack.md](document-pack.md).
+Startup checks the feature record against the deployed worker and sandbox image digests. Republish the contract for the new digests, or set `DOCUMENTS_ENABLED=false` until you can. See [document-pack.md](document-pack.md).
 
 **The analyst says no source is configured, but the UI shows Fabric connected.**
 The API can report a linked Fabric grant before the selected provider contract has passed readiness. Re-run the provider contract and acceptance gates; an environment variable alone cannot promote the provider.
@@ -45,7 +45,7 @@ Readiness requires two distinct tenants. If your Fabric tenant ID equals your pr
 The source's schema snapshot is missing, invalid, or describes a different source, so the API registers no query tools and logs `Fabric source queries are unavailable`. Build and publish the snapshot, then restart the API revision. See [fabric-ontology-lab.md](fabric-ontology-lab.md#publish-the-schema-snapshot).
 
 **Building images on an ARM machine produces something Container Apps will not run.**
-Apple Silicon and ARM WSL hosts build `linux/arm64` by default. Use the repository deployment hooks, which build with ACR remotely. Never push a locally built image straight to Container Apps or Hosted Agents.
+Apple Silicon and ARM WSL hosts build `linux/arm64` by default. Use the repository deployment hooks, which build with ACR remotely. Never push a locally built image straight to Container Apps.
 
 **Contract publication scripts fail with `Forbidden ... through public internet`.**
 Cosmos DB is reachable only through its private endpoint. Run those scripts from inside the VNet — a self-hosted CI runner or a jump host. Adding a firewall IP rule will not help when public network access is disabled.

@@ -265,8 +265,6 @@ resource "azapi_resource" "api" {
               { name = "EDA_REDIS_URL", value = var.redis_url },
               { name = "EDA_FOUNDRY_PROJECT_ENDPOINT", value = var.foundry_project_endpoint },
               { name = "EDA_FOUNDRY_MODEL_DEPLOYMENT", value = var.foundry_model_deployment },
-              { name = "EDA_HOSTED_AGENT_NAME", value = "enterprise-data-analyst-long-job" },
-              { name = "EDA_HOSTED_AGENT_ENABLED", value = "true" },
               { name = "EDA_ANALYSIS_RUNTIME_ENABLED", value = "true" },
               { name = "EDA_MODEL_PROFILE", value = var.model_profile },
               { name = "EDA_FOUNDRY_HOSTING", value = "azure" },

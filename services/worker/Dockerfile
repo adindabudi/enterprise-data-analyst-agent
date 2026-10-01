@@ -55,5 +55,6 @@ COPY --from=document-skills /opt/web-skills /opt/web-skills
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/app
-ENTRYPOINT ["python", "-m", "eda_worker.container_entrypoint"]
-CMD ["run"]
+# Maintenance jobs name their command (cleanup, publish-documents); the API image copies its assets.
+ENTRYPOINT ["eda-worker"]
+CMD ["--help"]

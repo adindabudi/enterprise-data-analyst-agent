@@ -20,10 +20,10 @@ from eda_runtime_state.tasks import InMemoryRuntimeStateRepository, RuntimeState
 
 from apps.api.tests.unit.storage.test_input_artifacts import Blobs, Workspace
 from apps.api.tests.unit.storage.test_uploads import OWNER, SESSION_ID, ScannedBlobStore, chunks
-from apps.api.tests.unit.test_task_service import FakeHostedClient
+from apps.api.tests.unit.test_task_service import FakeExecutor
 
 
-class ObservingHostedClient(FakeHostedClient):
+class ObservingExecutor(FakeExecutor):
     def __init__(self, runtime: InMemoryRuntimeStateRepository) -> None:
         super().__init__(runtime)
         self.runtime = runtime
@@ -32,14 +32,14 @@ class ObservingHostedClient(FakeHostedClient):
         self.fail_before_submission: Exception | None = None
         self.ambiguous_error: Exception = TimeoutError("response acknowledgement was lost")
 
-    async def start(self, task_id: str, *, user_identity: str, previous_response_id: str | None = None):
+    async def start(self, task_id: str):
         if self.fail_before_submission is not None:
             error, self.fail_before_submission = self.fail_before_submission, None
             raise error
         task = await self.runtime.resolve_task(task_id)
         assert task is not None
         self.submitted_tasks.append(task)
-        attempt = await super().start(task_id, user_identity=user_identity, previous_response_id=previous_response_id)
+        attempt = await super().start(task_id)
         await asyncio.sleep(0)
         if self.ambiguous_failure:
             raise self.ambiguous_error
@@ -59,14 +59,14 @@ class Pipeline:
         )
         self.workspace, self.blobs = Workspace(), Blobs()
         self.writer = CosmosBlobInputArtifactWriter(self.workspace, self.blobs)
-        self.hosted = ObservingHostedClient(self.runtime)
+        self.executor = ObservingExecutor(self.runtime)
         self.service = self.new_service()
 
     def new_service(self) -> TaskService:
         return TaskService(
             self.runtime,
             self.messages,
-            self.hosted,
+            self.executor,
             uploads=self.uploads,
             input_artifact_writer=self.writer,
         )
@@ -91,7 +91,7 @@ async def test_verified_inputs_are_persisted_on_the_canonical_task_before_dispat
     assert len(task.input_artifacts) == 1
     assert task.input_artifacts[0].kind is ArtifactKind.INPUT
     assert task.query_results == ()
-    assert pipeline.hosted.submitted_tasks[0].input_artifacts == task.input_artifacts
+    assert pipeline.executor.submitted_tasks[0].input_artifacts == task.input_artifacts
     persisted = await pipeline.runtime.resolve_task(task.id)
     assert persisted is not None and persisted.input_artifacts == task.input_artifacts
 
@@ -107,7 +107,7 @@ async def test_unclean_inputs_never_reach_task_submission(scan_result: str | Non
         await pipeline.service.start_task(partition, "blocked-upload-key", message_id, input_upload_ids=(upload_id,))
 
     assert pipeline.quarantine.downloads == 0
-    assert pipeline.hosted.started == []
+    assert pipeline.executor.started == []
     assert pipeline.blobs.items == {}
     assert (
         await pipeline.runtime.get_owned_task(partition, deterministic_task_id(partition, "blocked-upload-key")) is None
@@ -128,7 +128,7 @@ async def test_foreign_upload_cannot_be_bound_to_a_task(scope: str) -> None:
     with pytest.raises(LookupError):
         await pipeline.service.start_task(partition, "foreign-upload-key", message_id, input_upload_ids=(upload_id,))
 
-    assert pipeline.hosted.started == []
+    assert pipeline.executor.started == []
     assert pipeline.quarantine.downloads == 0
 
 
@@ -144,7 +144,7 @@ async def test_task_retry_reuses_original_inputs_and_does_not_resubmit() -> None
     )
 
     assert retried == first
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
 
 
 @pytest.mark.parametrize(
@@ -154,11 +154,11 @@ async def test_task_retry_reuses_original_inputs_and_does_not_resubmit() -> None
 async def test_known_non_submission_can_retry_without_promoting_inputs_again(error_type: type[Exception]) -> None:
     pipeline = Pipeline()
     partition, message_id, upload_id = await pipeline.source()
-    pipeline.hosted.fail_before_submission = error_type("connection could not be established")
+    pipeline.executor.fail_before_submission = error_type("connection could not be established")
 
     with pytest.raises(error_type):
         await pipeline.service.start_task(partition, "not-submitted-key", message_id, input_upload_ids=(upload_id,))
-    assert pipeline.hosted.started == []
+    assert pipeline.executor.started == []
     pipeline.quarantine.scan_result = None
 
     retried = await pipeline.new_service().start_task(
@@ -166,7 +166,7 @@ async def test_known_non_submission_can_retry_without_promoting_inputs_again(err
     )
 
     assert retried.active_attempt_id is not None
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
     assert pipeline.quarantine.downloads == 1
     assert pipeline.quarantine.downloads == 1
 
@@ -182,7 +182,7 @@ async def test_idempotency_key_cannot_change_the_selected_uploads() -> None:
         with pytest.raises(RuntimeStateConflict):
             await pipeline.service.start_task(partition, "bound-upload-key", message_id, input_upload_ids=upload_ids)
 
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
 
 
 @pytest.mark.asyncio
@@ -193,13 +193,13 @@ async def test_partial_input_promotion_is_retriable_without_duplicate_submission
 
     with pytest.raises(CosmosHttpResponseError):
         await pipeline.service.start_task(partition, "partial-upload-key", message_id, input_upload_ids=(upload_id,))
-    assert pipeline.hosted.started == []
+    assert pipeline.executor.started == []
     task = await pipeline.new_service().start_task(
         partition, "partial-upload-key", message_id, input_upload_ids=(upload_id,)
     )
 
     assert len(task.input_artifacts) == 1
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
     assert len(pipeline.blobs.items) == len(pipeline.workspace.items) == 1
 
 
@@ -216,13 +216,13 @@ async def test_concurrent_upload_task_submissions_dispatch_at_most_once() -> Non
         return_exceptions=True,
     )
 
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
     assert all(isinstance(result, (TaskRecord, RuntimeStateConflict)) for result in results)
     retried = await pipeline.service.start_task(
         partition, "concurrent-upload-key", message_id, input_upload_ids=(upload_id,)
     )
     assert retried.active_attempt_id is not None
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
 
 
 @pytest.mark.asyncio
@@ -240,7 +240,7 @@ async def test_upload_task_idempotency_is_partition_scoped() -> None:
     assert second.id != first.id
     assert second.owner_object_id == other.owner_object_id
     assert second.input_artifacts != first.input_artifacts
-    assert len(pipeline.hosted.started) == 2
+    assert len(pipeline.executor.started) == 2
 
 
 @pytest.mark.parametrize("error_type", [TimeoutError, ServiceResponseError, httpx.ReadTimeout, httpx.WriteError])
@@ -248,8 +248,8 @@ async def test_upload_task_idempotency_is_partition_scoped() -> None:
 async def test_ambiguous_dispatch_failure_is_not_blindly_resubmitted(error_type: type[Exception]) -> None:
     pipeline = Pipeline()
     partition, message_id, upload_id = await pipeline.source()
-    pipeline.hosted.ambiguous_failure = True
-    pipeline.hosted.ambiguous_error = error_type("response acknowledgement was lost")
+    pipeline.executor.ambiguous_failure = True
+    pipeline.executor.ambiguous_error = error_type("response acknowledgement was lost")
 
     with pytest.raises(error_type):
         await pipeline.service.start_task(partition, "ambiguous-upload-key", message_id, input_upload_ids=(upload_id,))
@@ -258,7 +258,7 @@ async def test_ambiguous_dispatch_failure_is_not_blindly_resubmitted(error_type:
             partition, "ambiguous-upload-key", message_id, input_upload_ids=(upload_id,)
         )
 
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
 
 
 @pytest.mark.parametrize("trigger", ["retry", "reconcile"])
@@ -266,7 +266,7 @@ async def test_ambiguous_dispatch_failure_is_not_blindly_resubmitted(error_type:
 async def test_abandoned_ambiguous_dispatch_reaches_canonical_failure_without_resubmitting(trigger: str) -> None:
     pipeline = Pipeline()
     partition, message_id, upload_id = await pipeline.source()
-    pipeline.hosted.ambiguous_failure = True
+    pipeline.executor.ambiguous_failure = True
     key = "expired-dispatch-key"
     with pytest.raises(TimeoutError):
         await pipeline.service.start_task(partition, key, message_id, input_upload_ids=(upload_id,))
@@ -289,7 +289,7 @@ async def test_abandoned_ambiguous_dispatch_reaches_canonical_failure_without_re
     assert result.input_artifacts == pending.input_artifacts
     assert await pipeline.runtime.resolve_task(result.id) == result
     assert await service.start_task(partition, key, message_id, input_upload_ids=(upload_id,)) == result
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
     assert pipeline.quarantine.downloads == 1
 
 
@@ -304,7 +304,7 @@ async def test_stale_dispatch_snapshot_cannot_fail_a_newly_attached_attempt() ->
 
     assert result.active_attempt_id == task.active_attempt_id
     assert result.status is TaskStatus.PLANNING
-    assert len(pipeline.hosted.started) == 1
+    assert len(pipeline.executor.started) == 1
 
 
 @pytest.mark.asyncio
@@ -313,19 +313,19 @@ async def test_late_dispatch_acknowledgement_is_cancelled_after_canonical_failur
 ) -> None:
     pipeline = Pipeline()
     partition, message_id, upload_id = await pipeline.source()
-    original_start = pipeline.hosted.start
+    original_start = pipeline.executor.start
 
-    async def late_start(task_id: str, *, user_identity: str, previous_response_id: str | None = None):
-        attempt = await original_start(task_id, user_identity=user_identity, previous_response_id=previous_response_id)
+    async def late_start(task_id: str):
+        attempt = await original_start(task_id)
         await pipeline.runtime.transition_task(task_id, TaskStatus.FAILED, 0)
         return attempt
 
-    monkeypatch.setattr(pipeline.hosted, "start", late_start)
+    monkeypatch.setattr(pipeline.executor, "start", late_start)
     result = await pipeline.service.start_task(
         partition, "late-dispatch-key", message_id, input_upload_ids=(upload_id,)
     )
 
     assert result.status is TaskStatus.FAILED
     assert result.active_attempt_id is None
-    assert [attempt_id for attempt_id, _ in pipeline.hosted.cancelled] == ["resp_attempt00000001"]
-    assert len(pipeline.hosted.started) == 1
+    assert pipeline.executor.cancelled == ["resp_attempt00000001"]
+    assert len(pipeline.executor.started) == 1

@@ -45,7 +45,7 @@ Terraform environments use [scripts/deploy-terraform-environment.sh](../../scrip
 - creates the product and optional Fabric apps before writing a mode-0600 runtime variable file;
 - builds worker and sandbox images remotely, creates the Sandbox disk image and group, then applies image-dependent jobs;
 - maps only allowlisted nonsecret outputs into an isolated azd environment;
-- runs one `azd deploy --all` so the API and Hosted Agent share one hook owner;
+- runs one `azd deploy --all`, so the API's postdeploy hooks run once;
 - never calls `azd provision` or `azd up` in the Terraform path;
 - preserves deployed API/worker digests on the final apply;
 - stores Terraform data/state under an isolated acceptance path rather than the repository default state file.

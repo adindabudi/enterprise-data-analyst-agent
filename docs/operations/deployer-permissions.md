@@ -27,11 +27,10 @@ The preflight then verifies that app exists instead of creating one. You still n
 
 The templates create user-assigned managed identities and grant them data-plane roles. Nobody gets a shared key or connection string.
 
-| Identity                        | Gets access to                                                                      |
-| ------------------------------- | ----------------------------------------------------------------------------------- |
-| API                             | Cosmos DB, Blob Storage, Redis, Foundry Agent Consumer, user-identity impersonation |
-| Hosted Agent system identity    | Cosmos DB, Blob Storage, Redis, ACA Sandbox execution                               |
-| Cleanup and acceptance job UAMI | Cosmos DB, Blob Storage, Redis, Container Registry, selected Fabric resources       |
+| Identity                        | Gets access to                                                                                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- |
+| API                             | Cosmos DB, Blob Storage, Redis, the Foundry model (Cognitive Services User), ACA Sandbox execution |
+| Cleanup and acceptance job UAMI | Cosmos DB, Blob Storage, Redis, Container Registry, selected Fabric resources                      |
 
 The exact role definition IDs are in `scripts/rbac-assignments.json` and mirrored in `infra/bicep/modules/` and `infra/terraform/modules/`.
 

@@ -1,8 +1,4 @@
-"""The in-process lifecycle keeps the hosted workflow's rules without a workflow engine.
-
-Each case mirrors a hosted-workflow case, so the executor swap cannot quietly
-change what users see on cancellation, steering, repair, or failure.
-"""
+"""What users see from the task lifecycle on cancellation, steering, repair, and failure."""
 
 from __future__ import annotations
 
@@ -18,7 +14,7 @@ from eda_worker.lifecycle import (
     run_task_lifecycle,
 )
 
-from .test_hosted_workflow import FakeAnalysisServices, ModelPermissionError, control
+from .lifecycle_fakes import FakeAnalysisServices, ModelPermissionError, control
 
 
 def _kinds(services: FakeAnalysisServices) -> list[object]:

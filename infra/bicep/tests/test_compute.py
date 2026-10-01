@@ -86,7 +86,7 @@ def test_container_apps_use_one_api_and_digest_pinned_scheduled_cleanup() -> Non
     assert cleanup_environment["EDA_BLOB_SESSIONS_CONTAINER"] == "sessions"
 
 
-def test_api_receives_hosted_agent_dispatch_settings() -> None:
+def test_api_receives_single_runtime_settings() -> None:
     template = build_bicep_template(ROOT / "infra/bicep")
     resources = tuple(cast(Iterable[Mapping[str, Any]], iter_resources(template)))
     apps = resources_of_type(resources, "Microsoft.App/containerApps")
@@ -116,7 +116,7 @@ def test_api_receives_hosted_agent_dispatch_settings() -> None:
     }
     assert required <= api_env
     assert {"EDA_DTS_ENDPOINT", "EDA_DTS_TASKHUB"}.isdisjoint(api_env)
-    assert {"EDA_HOSTED_AGENT_NAME", "EDA_HOSTED_AGENT_ENABLED"} <= api_env
+    assert {"EDA_HOSTED_AGENT_NAME", "EDA_HOSTED_AGENT_ENABLED"}.isdisjoint(api_env)
     assert {"EDA_PUBLIC_ORIGIN", "EDA_ENTRA_TENANT_ID", "EDA_ENTRA_CLIENT_ID", "EDA_COOKIE_SECURE"} <= api_env
 
 

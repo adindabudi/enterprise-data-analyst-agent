@@ -8,7 +8,7 @@ Retry transient allocation failures with bounded backoff and the same idempotenc
 
 ## Sandbox not found
 
-A 404 after explicit deletion is success. A 404 during active work means the sandbox expired or terminated; mark the operation failed and let the Hosted Workflow resume from canonical phase state. Never reconstruct an identifier from user data.
+A 404 after explicit deletion is success. A 404 during active work means the sandbox expired or terminated; mark the operation failed and let the supervisor resume the task from canonical phase state. Never reconstruct an identifier from user data.
 
 ## Startup or health failure
 

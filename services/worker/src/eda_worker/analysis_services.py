@@ -1,8 +1,6 @@
 """The analysis runtime as services a task lifecycle can drive, with no hosting framework.
 
-These services run inside the API application. The legacy hosted agent
-imports the same classes, so both executors share one implementation while the
-old one drains.
+These services run inside the API application.
 """
 
 from __future__ import annotations
@@ -96,7 +94,7 @@ class RuntimeAnalysisServices(AnalysisServices):
         provider: AnalysisRuntimeProvider,
         *,
         delta_sink_factory: DeltaSinkFactory | None = None,
-        cancel_reason: str = "hosted_workflow",
+        cancel_reason: str = "task_lifecycle",
     ) -> None:
         self._provider = provider
         self._delta_sink_factory = delta_sink_factory

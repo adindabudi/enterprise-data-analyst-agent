@@ -150,7 +150,6 @@ az containerapp update --name "$api_name" --resource-group "$resource_group" \
     EDA_ANALYSIS_RUNTIME_ENABLED=true \
     EDA_MODEL_CONTRACT_VERIFIED=true \
     EDA_TOKENIZER_CALIBRATED=true \
-    EDA_HOSTED_AGENT_ENABLED=true \
     EDA_ENTRA_FEDERATION_READY=true \
     EDA_CORE_READY=true \
     --only-show-errors >/dev/null \
@@ -194,7 +193,6 @@ verify_api_environment 'EDA_SANDBOX_DISK_IMAGE_ID' "$sandbox_disk_image_id"
 verify_api_environment 'EDA_ANALYSIS_RUNTIME_ENABLED' 'true'
 verify_api_environment 'EDA_MODEL_CONTRACT_VERIFIED' 'true'
 verify_api_environment 'EDA_TOKENIZER_CALIBRATED' 'true'
-verify_api_environment 'EDA_HOSTED_AGENT_ENABLED' 'true'
 verify_api_environment 'EDA_ENTRA_FEDERATION_READY' 'true'
 verify_api_environment 'EDA_CORE_READY' 'true'
 

@@ -152,7 +152,7 @@ variable "powerbi_project_enabled" {
 
   validation {
     condition     = !var.powerbi_project_enabled
-    error_message = "Power BI Project Pack requires the retired DTS runtime and is unavailable in the Hosted Agent topology."
+    error_message = "Power BI Project Pack requires the retired DTS runtime and is unavailable in this release."
   }
 }
 

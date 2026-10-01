@@ -24,10 +24,10 @@ A release is accepted only by fresh executable evidence. Source presence, local 
 ## Product state
 
 - [ ] Browser ownership derives only from the authenticated server-side principal.
-- [ ] Canonical messages and task state are committed before Hosted Responses dispatch.
-- [ ] A committed task recovers through resilient Hosted Workflow checkpoints without the original browser or API process.
+- [ ] Canonical messages and task state are committed before the task is queued.
+- [ ] A committed task is recovered by any API replica's supervisor, without the original browser or replica.
 - [ ] Steering, cancellation, blocked authorization, reconnect, and idempotent publication pass deployed tests.
-- [ ] Redis remains transient delivery state; Foundry owns hosted execution checkpoints; Cosmos/Blob remain canonical product state.
+- [ ] Redis remains transient delivery state; Cosmos/Blob remain canonical product state, including the execution ledger.
 
 ## Artifacts
 

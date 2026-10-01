@@ -4,7 +4,6 @@ param tags object
 param webIdentityPrincipalId string
 param workerIdentityPrincipalId string
 param sessionInitIdentityPrincipalId string
-param foundryProjectPrincipalId string
 
 var acrPullRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -49,16 +48,6 @@ resource sessionInitAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01'
   scope: registry
   properties: {
     principalId: sessionInitIdentityPrincipalId
-    roleDefinitionId: acrPullRoleDefinitionId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource foundryProjectAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(registry.id, foundryProjectPrincipalId, acrPullRoleDefinitionId)
-  scope: registry
-  properties: {
-    principalId: foundryProjectPrincipalId
     roleDefinitionId: acrPullRoleDefinitionId
     principalType: 'ServicePrincipal'
   }

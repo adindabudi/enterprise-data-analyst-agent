@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from uuid import UUID
 
 import pytest
+from eda_api.analysis.attempts import AttemptStatus, TaskAttempt
 from eda_api.auth.models import AuthSessionRecord, Principal
 from eda_api.auth.repository import InMemoryAuthRepository
 from eda_api.config import Settings
-from eda_api.hosted_responses import HostedResponseAttempt, HostedResponseStatus
 from eda_api.main import create_app
 from eda_api.storage.uploads import InMemoryBlobStore, InMemoryUploadRepository, UploadService
 from eda_api.storage.workspace import InMemoryWorkspaceRepository
@@ -20,26 +20,19 @@ from fastapi.testclient import TestClient
 
 class FakeDurableClient:
     def __init__(self) -> None:
-        self.scheduled: list[tuple[str, str, str | None]] = []
+        self.scheduled: list[str] = []
         self.events: list[tuple[str, str, dict[str, object]]] = []
 
-    async def start(
-        self,
-        task_id: str,
-        *,
-        user_identity: str,
-        previous_response_id: str | None = None,
-    ) -> HostedResponseAttempt:
-        self.scheduled.append((task_id, user_identity, previous_response_id))
-        return HostedResponseAttempt(id=f"resp_{task_id[5:]}", status=HostedResponseStatus.QUEUED)
+    async def start(self, task_id: str) -> TaskAttempt:
+        self.scheduled.append(task_id)
+        return TaskAttempt(id=f"resp_{task_id[5:]}", status=AttemptStatus.QUEUED)
 
-    async def get(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        del user_identity
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.IN_PROGRESS)
+    async def get(self, response_id: str) -> TaskAttempt:
+        return TaskAttempt(id=response_id, status=AttemptStatus.IN_PROGRESS)
 
-    async def cancel(self, response_id: str, *, user_identity: str) -> HostedResponseAttempt:
-        self.events.append((response_id, "cancel", {"userIdentity": user_identity}))
-        return HostedResponseAttempt(id=response_id, status=HostedResponseStatus.CANCELLED)
+    async def cancel(self, response_id: str) -> TaskAttempt:
+        self.events.append((response_id, "cancel", {}))
+        return TaskAttempt(id=response_id, status=AttemptStatus.CANCELLED)
 
     async def close(self) -> None:
         return None
@@ -86,7 +79,7 @@ def open_control_client(settings: Settings, msal_client: object, owner: Principa
         runtime_repository_override=runtime,
         event_store_override=NullTaskEventStore(),
         message_repository_override=messages,
-        hosted_client_override=durable,
+        task_executor_override=durable,
     )
     client = TestClient(application, base_url="https://analyst.example.test", raise_server_exceptions=False)
     client.__enter__()
@@ -158,7 +151,7 @@ def test_message_and_task_creation_are_idempotent_and_polling_is_filtered(contro
     assert {"tenantId", "ownerObjectId", "sourceMessageId", "_etag"}.isdisjoint(polled.json())
 
 
-def test_steer_and_cancel_persist_then_cancel_the_hosted_attempt(control_client: ControlClient) -> None:
+def test_steer_and_cancel_persist_then_cancel_the_running_attempt(control_client: ControlClient) -> None:
     session_id = create_session(control_client)
     message_id = create_message(control_client, session_id)
     task = control_client.client.post(

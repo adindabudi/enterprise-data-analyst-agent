@@ -1,5 +1,4 @@
 # Superpowers planning docs are authored freehand.
-docs/superpowers/**
 
 # Generated, compiled, and copied build artifacts.
 apps/api/static/**
