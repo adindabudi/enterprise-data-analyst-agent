@@ -33,21 +33,20 @@ def test_fabric_disabled_is_the_default_and_every_added_resource_is_conditional(
     assert "module fabricAuth 'modules/fabric-auth.bicep' = if (fabricEnabled)" in main
 
     vaults = resources_of_type("Microsoft.KeyVault/vaults")
-    fabric_jobs = [
-        resource for resource in resources_of_type("Microsoft.App/jobs") if "fabric-acceptance" in str(resource)
-    ]
     fabric_containers = [
         resource
         for resource in resources_of_type("Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers")
         if "fabricAuth" in str(resource)
     ]
     assert len(vaults) == 1
-    assert len(fabric_jobs) == 1
     assert len(fabric_containers) == 1
     assert all(
         any(flag in str(resource.get("condition", "")) for flag in ("fabricEnabled", "enabled"))
-        for resource in (*vaults, *fabric_jobs, *fabric_containers)
+        for resource in (*vaults, *fabric_containers)
     )
+    jobs = resources_of_type("Microsoft.App/jobs")
+    assert len(jobs) == 1
+    assert "cleanupName" in str(jobs[0]["name"])
 
 
 def test_fabric_vault_has_only_declared_crypto_data_actions() -> None:
@@ -99,11 +98,11 @@ def test_private_vault_artifacts_are_bootstrapped_through_the_vnet() -> None:
     assert "Microsoft.KeyVault/vaults/keys/create/action" in source
     assert source.count("Microsoft.KeyVault/vaults/keys/read") == 1
     assert "resource cacheWrapKey 'Microsoft.KeyVault/vaults/keys@2024-11-01' existing" in source
-    for assignment in ("webCacheCrypto", "workerCacheCrypto", "acceptanceCacheWrap"):
-        assert (
-            f"resource {assignment} 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady)"
-            in source
-        )
+    assert (
+        "resource webCacheCrypto 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady)"
+        in source
+    )
+    assert "workerIdentityPrincipalId" not in source
 
 
 def test_enabled_runtime_receives_only_nonsecret_fabric_configuration() -> None:
@@ -118,7 +117,6 @@ def test_enabled_runtime_receives_only_nonsecret_fabric_configuration() -> None:
         "FABRIC_KEY_VAULT_URL",
         "FABRIC_SIGNING_CERTIFICATE_NAME",
         "FABRIC_CACHE_WRAP_KEY_NAME",
-        "FABRIC_SEMANTIC_MODELS_JSON",
         "FABRIC_ONTOLOGIES_JSON",
         "EDA_DEPLOYMENT_ID",
         "EDA_COSMOS_FABRIC_AUTH_CONTAINER",
@@ -131,7 +129,6 @@ def test_enabled_runtime_receives_only_nonsecret_fabric_configuration() -> None:
     apps = tuple(resource for resource in resources if resource.get("type") == "Microsoft.App/containerApps")
     api = next(resource for resource in apps if "apiName" in str(resource["name"]))
     api_environment = str(api["properties"]["template"]["containers"][0]["env"])
-    assert "FABRIC_SEMANTIC_MODELS_JSON" not in api_environment
     assert "FABRIC_ONTOLOGIES_JSON" in api_environment
     manifest = (ROOT / "azure.yaml").read_text(encoding="utf-8")
     assert "FABRIC_ENABLED: ${FABRIC_ENABLED=false}" not in manifest
@@ -141,37 +138,12 @@ def test_enabled_runtime_receives_only_nonsecret_fabric_configuration() -> None:
     assert "FABRIC_RUNTIME_ENABLED" not in parameters
 
 
-def test_acceptance_job_is_manual_nonnetworked_and_uses_exact_worker_image() -> None:
-    source = (ROOT / "infra/bicep/modules/container-apps.bicep").read_text(encoding="utf-8")
-    assert "var fabricAcceptanceName = 'fabric-acc-${environmentName}-${suffix}'" in source
-    resources = resources_of_type("Microsoft.App/jobs")
-    [job] = [resource for resource in resources if "fabric-acceptance" in str(resource)]
-    assert job["properties"]["configuration"]["triggerType"] == "Manual"
-    assert job["properties"]["configuration"]["manualTriggerConfig"] == {
-        "parallelism": 1,
-        "replicaCompletionCount": 1,
-    }
-    assert "ingress" not in str(job).lower()
-    assert "workerImage" in str(job["properties"]["template"]["containers"][0]["image"])
-    assert "FABRIC_ACCEPTANCE_MODE" in str(job)
-    assert "eda-worker" in str(job)
-    assert "accept-fabric" in str(job)
-    assert "fabricProvider" in str(job["properties"]["template"]["containers"][0]["command"])
-
-
-def test_provider_and_catalog_parameters_are_mutually_selectable_without_new_resources() -> None:
+def test_ontology_is_the_only_selectable_provider() -> None:
     main = (ROOT / "infra/bicep/main.bicep").read_text(encoding="utf-8")
     parameters = (ROOT / "infra/bicep/main.parameters.json").read_text(encoding="utf-8")
-    assert "'semantic_model'" in main
-    assert "'ontology'" in main
-    assert "param fabricProvider string = ''" in main
+    assert "@allowed([\n  ''\n  'ontology'\n])\nparam fabricProvider string = ''" in main
     assert "@secure()\nparam fabricOntologiesJson string = ''" in main
     assert '"${FABRIC_PROVIDER=}"' in parameters
-    assert '"${FABRIC_SEMANTIC_MODELS_JSON=}"' in parameters
     assert '"${FABRIC_ONTOLOGIES_JSON=}"' in parameters
     assert "={}}" not in parameters
     assert len(resources_of_type("Microsoft.KeyVault/vaults")) == 1
-    assert (
-        len([resource for resource in resources_of_type("Microsoft.App/jobs") if "fabric-acceptance" in str(resource)])
-        == 1
-    )

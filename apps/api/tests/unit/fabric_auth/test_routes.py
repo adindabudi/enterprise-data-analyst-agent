@@ -176,7 +176,7 @@ def settings() -> Settings:
             "foundry_project_endpoint": "https://example.services.ai.azure.com/api/projects/example",
             "foundry_model_deployment": "analysis-opus",
             "fabric_enabled": True,
-            "fabric_provider": "semantic_model",
+            "fabric_provider": "ontology",
             "fabric_tenant_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
             "fabric_client_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
             "fabric_key_vault_url": "https://fabric.vault.azure.net",
@@ -235,7 +235,7 @@ def fabric_stack(
     cipher = EnvelopeCipher(_PassthroughKeyWrapper())
     coordinator = FabricAuthCoordinator(
         settings=settings,
-        provider=FabricProvider.SEMANTIC_MODEL,
+        provider=FabricProvider.ONTOLOGY,
         client=_FakeFabricClient(UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), cipher),
         repository=repository,
         cipher=cipher,
@@ -295,13 +295,13 @@ def _cookie_from_response(response: object, name: str) -> str | None:
 def _grant(owner: Principal, state: FabricGrantState) -> FabricGrantRecord:
     now = datetime.now(UTC)
     return FabricGrantRecord(
-        id="fabric-grant:semantic_model",
+        id="fabric-grant:ontology",
         tenant_id=owner.tenant_id,
         owner_object_id=owner.owner_object_id,
-        provider=FabricProvider.SEMANTIC_MODEL,
+        provider=FabricProvider.ONTOLOGY,
         fabric_tenant_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         account_hash="f" * 64,
-        scope_hash=provider_scope_hash(FabricProvider.SEMANTIC_MODEL),
+        scope_hash=provider_scope_hash(FabricProvider.ONTOLOGY),
         audience_hash=audience_hash(),
         state=state,
         cache=CipherEnvelope(
@@ -322,7 +322,7 @@ def test_start_requires_csrf_and_strict_body(
     missing_auth = client.post("/api/fabric/auth/start", json={})
     bad_body = client.post(
         "/api/fabric/auth/start",
-        json={"taskId": "task_active12345", "provider": "semantic_model"},
+        json={"taskId": "task_active12345", "provider": "ontology"},
         headers=_headers("csrf-a"),
         cookies={"eda_session": "auth_owner_a_1234567890", "eda_csrf": "csrf-a"},
     )
@@ -446,14 +446,14 @@ def test_callback_stores_only_pending_and_redirects_without_receipt(
     assert receipt not in callback.headers["location"]
     assert receipt not in callback.text
     assert (
-        asyncio.run(repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.SEMANTIC_MODEL))
+        asyncio.run(repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.ONTOLOGY))
         is None
     )
     pending = asyncio.run(
         repository.get_pending_by_receipt(
             owners[0].tenant_id,
             owners[0].owner_object_id,
-            FabricProvider.SEMANTIC_MODEL,
+            FabricProvider.ONTOLOGY,
             receipt,
         )
     )
@@ -529,12 +529,8 @@ def test_complete_rejects_owner_mismatch_and_replay(
     assert owner_a.status_code == 204
     assert replay.status_code == 401
     assert task_service.resume_calls == [("task_blocked1234", receipt)]
-    grant_a = asyncio.run(
-        repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.SEMANTIC_MODEL)
-    )
-    grant_b = asyncio.run(
-        repository.get_grant(owners[1].tenant_id, owners[1].owner_object_id, FabricProvider.SEMANTIC_MODEL)
-    )
+    grant_a = asyncio.run(repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.ONTOLOGY))
+    grant_b = asyncio.run(repository.get_grant(owners[1].tenant_id, owners[1].owner_object_id, FabricProvider.ONTOLOGY))
     assert grant_a is not None
     assert grant_b is None
     promoted_cache = asyncio.run(
@@ -585,7 +581,7 @@ def test_complete_rejects_stale_checkpoint_before_promotion(
 
     assert complete.status_code == 409
     assert (
-        asyncio.run(repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.SEMANTIC_MODEL))
+        asyncio.run(repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.ONTOLOGY))
         is None
     )
 
@@ -601,14 +597,14 @@ def test_status_and_unlink_return_filtered_state_only(
 
     unlinked = client.get("/api/fabric/auth/status", cookies=status_cookies)
     assert unlinked.status_code == 200
-    assert unlinked.json() == {"provider": "semantic_model", "state": "unlinked", "chatQuery": False}
+    assert unlinked.json() == {"provider": "ontology", "state": "unlinked", "chatQuery": False}
 
     asyncio.run(repository.create_grant(_grant(owners[0], FabricGrantState.LINKED)))
     linked = client.get("/api/fabric/auth/status", cookies=status_cookies)
-    assert linked.json() == {"provider": "semantic_model", "state": "linked", "chatQuery": False}
+    assert linked.json() == {"provider": "ontology", "state": "linked", "chatQuery": False}
 
     existing = asyncio.run(
-        repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.SEMANTIC_MODEL)
+        repository.get_grant(owners[0].tenant_id, owners[0].owner_object_id, FabricProvider.ONTOLOGY)
     )
     assert existing is not None and existing.etag is not None
     asyncio.run(
@@ -617,12 +613,12 @@ def test_status_and_unlink_return_filtered_state_only(
         )
     )
     reauth = client.get("/api/fabric/auth/status", cookies=status_cookies)
-    assert reauth.json() == {"provider": "semantic_model", "state": "reauth_required", "chatQuery": False}
+    assert reauth.json() == {"provider": "ontology", "state": "reauth_required", "chatQuery": False}
 
     deleted = client.delete("/api/fabric/auth", headers=headers, cookies=auth_cookies)
     after_delete = client.get("/api/fabric/auth/status", cookies=status_cookies)
     assert deleted.status_code == 204
-    assert after_delete.json() == {"provider": "semantic_model", "state": "unlinked", "chatQuery": False}
+    assert after_delete.json() == {"provider": "ontology", "state": "unlinked", "chatQuery": False}
 
 
 def test_status_reports_chat_query_when_the_interactive_source_is_wired(
@@ -636,7 +632,7 @@ def test_status_reports_chat_query_when_the_interactive_source_is_wired(
 
     response = client.get("/api/fabric/auth/status", cookies=status_cookies)
 
-    assert response.json() == {"provider": "semantic_model", "state": "linked", "chatQuery": True}
+    assert response.json() == {"provider": "ontology", "state": "linked", "chatQuery": True}
 
 
 @pytest.mark.parametrize(

@@ -54,7 +54,8 @@ def test_managed_redis_uses_entra_tls_and_explicit_private_access_policy() -> No
     assert database["clientProtocol"] == "Encrypted"
     assert database["evictionPolicy"] == "VolatileLRU"
     assert database["port"] == 10000
-    assert len(assignments) == 2
+    assert len(assignments) == 1
+    assert "webIdentityPrincipalId" in str(assignments[0]["properties"]["user"])
 
     redis_private_endpoints = [
         resource

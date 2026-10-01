@@ -10,7 +10,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNBOOK = ROOT / "docs" / "runbooks" / "fabric-ontology-lab.md"
-DOCTOR = ROOT / "scripts" / "doctor-fabric-ontology.sh"
 CLEANUP = ROOT / "scripts" / "cleanup-fabric-ontology-lab.sh"
 WORKSPACE_ID = "11111111-1111-1111-1111-111111111111"
 TENANT_ID = "22222222-2222-2222-2222-222222222222"
@@ -130,22 +129,6 @@ def test_runbook_records_external_fixture_setup_and_cleanup_boundaries() -> None
         "resource group",
     ):
         assert required_text.casefold() in content.casefold()
-
-
-def test_doctor_is_read_only_and_uses_an_isolated_azure_cli_context() -> None:
-    content = DOCTOR.read_text(encoding="utf-8")
-
-    assert "AZURE_CONFIG_DIR" in content
-    assert "mktemp -d" in content
-    assert "chmod 700" in content
-    assert "trap" in content
-    assert "FABRIC_PROVIDER" in content
-    assert "ontology" in content
-    assert "get-access-token" in content
-    assert "list_ontology_entity_types" in content
-    assert "search_ontology" in content
-    for forbidden in ("az login", "az logout", "az account set", "az group delete", "az capacity", "DELETE "):
-        assert forbidden not in content
 
 
 def test_cleanup_defaults_to_dry_run_without_contacting_fabric(

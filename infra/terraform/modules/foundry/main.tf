@@ -22,10 +22,6 @@ variable "tags" {
   type = map(string)
 }
 
-variable "worker_identity_principal_id" {
-  type = string
-}
-
 variable "web_identity_principal_id" {
   type = string
 }
@@ -113,13 +109,6 @@ resource "azapi_resource" "terra" {
       raiPolicyName        = "Microsoft.DefaultV2"
     }
   }
-}
-
-resource "azurerm_role_assignment" "worker_cognitive_services_user" {
-  principal_id       = var.worker_identity_principal_id
-  principal_type     = "ServicePrincipal"
-  role_definition_id = local.cognitive_services_user_role
-  scope              = azapi_resource.account.id
 }
 
 resource "azurerm_role_assignment" "web_cognitive_services_user" {

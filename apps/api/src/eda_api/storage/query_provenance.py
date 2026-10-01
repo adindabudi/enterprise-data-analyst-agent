@@ -1,16 +1,16 @@
-"""Actual interactive tool invocations, independent of bounded agent/handoff state."""
+"""Query provenance stored by the retired interactive chat, read back into session history.
+
+Nothing writes these records now. Stored chat queries and interactive sessions expire 30 days
+after they were written; until then history still attaches them to the question that asked.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-from typing import Any, Literal, Protocol, Self, cast
-from uuid import UUID
+from typing import Any, Literal, Self, cast
 
-from azure.core import MatchConditions
-from azure.cosmos.aio import ContainerProxy
-from azure.cosmos.exceptions import CosmosHttpResponseError
 from eda_runtime_state.models import TaskPartition
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
@@ -118,68 +118,6 @@ def read_query_record(document: dict[str, Any], partition: TaskPartition) -> Cha
         # Do not log the document: its query can contain business data.
         logger.error("invalid stored chat query provenance")
         raise
-
-
-class ChatQueryStore(Protocol):
-    async def start(self, record: ChatQueryRecord) -> None: ...
-
-    async def finish(self, record: ChatQueryRecord) -> ChatQueryRecord: ...
-
-    async def list_response(self, partition: TaskPartition, response_id: str) -> tuple[ChatQueryRecord, ...]: ...
-
-
-class CosmosChatQueryStore:
-    def __init__(self, workspace: ContainerProxy) -> None:
-        self._workspace = workspace
-
-    async def start(self, record: ChatQueryRecord) -> None:
-        if record.step.state != "running":
-            raise ValueError("query must start running")
-        # Never upsert: an invocation ID collision must stop before executing the tool.
-        await self._workspace.create_item(body=record.model_dump(mode="json", by_alias=True))
-
-    async def finish(self, record: ChatQueryRecord) -> ChatQueryRecord:
-        if record.step.state == "running":
-            raise ValueError("query finish must be terminal")
-        partition = TaskPartition(
-            tenant_id=UUID(record.tenant_id), owner_object_id=UUID(record.owner_object_id), session_id=record.session_id
-        )
-        for _ in range(3):
-            document = await self._workspace.read_item(item=record.id, partition_key=partition.values())
-            current = read_query_record(document, partition)
-            if current.model_dump(exclude={"step"}) != record.model_dump(exclude={"step"}) or current.step.model_dump(
-                include={"step_id", "kind", "label", "query", "source", "query_sha256", "query_truncated", "started_at"}
-            ) != record.step.model_dump(
-                include={"step_id", "kind", "label", "query", "source", "query_sha256", "query_truncated", "started_at"}
-            ):
-                raise ValueError("query invocation binding changed")
-            if current.step.state != "running":
-                if current.step.state == record.step.state and current.step.model_dump(
-                    exclude={"finished_at"}
-                ) != record.step.model_dump(exclude={"finished_at"}):
-                    raise ValueError("query terminal outcome conflicts with stored evidence")
-                return current
-            try:
-                await self._workspace.replace_item(
-                    item=record.id,
-                    body=record.model_dump(mode="json", by_alias=True),
-                    etag=document["_etag"],
-                    match_condition=MatchConditions.IfNotModified,
-                )
-                return record
-            except CosmosHttpResponseError as error:
-                if error.status_code != 412:
-                    raise
-        raise RuntimeError("query provenance update conflicted repeatedly")
-
-    async def list_response(self, partition: TaskPartition, response_id: str) -> tuple[ChatQueryRecord, ...]:
-        documents = self._workspace.query_items(
-            query="SELECT * FROM c WHERE c.recordType = 'chatQuery' AND c.responseId = @responseId",
-            parameters=[{"name": "@responseId", "value": response_id}],
-            partition_key=partition.values(),
-        )
-        records = [read_query_record(document, partition) async for document in documents]
-        return tuple(sorted(records, key=lambda item: (item.step.started_at, item.sequence, item.id)))
 
 
 def legacy_query_steps(state: object, owned_user_ids: set[str]) -> dict[str, list[dict[str, str]]]:

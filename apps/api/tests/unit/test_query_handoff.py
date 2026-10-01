@@ -6,8 +6,7 @@ from uuid import UUID
 
 import pytest
 from eda_api.analysis.attempts import AttemptStatus, TaskAttempt
-from eda_api.chat.service import MAX_HANDED_OFF_QUERIES, QueryRun, _QueryLedger
-from eda_api.task_service import TaskService
+from eda_api.task_service import QueryRun, TaskService
 from eda_contracts import ArtifactKind, ArtifactRef
 from eda_runtime_state.messages import InMemoryMessageRepository
 from eda_runtime_state.models import TaskPartition
@@ -19,19 +18,6 @@ PARTITION = TaskPartition(
     session_id="ses_interactive_12345678",
 )
 ROWS = '[{"dept":1,"occupied":21},{"dept":6,"occupied":10}]'
-
-
-def test_the_ledger_keeps_the_refined_queries_when_a_turn_runs_long() -> None:
-    ledger = _QueryLedger()
-
-    for index in range(MAX_HANDED_OFF_QUERIES + 3):
-        ledger.record(QueryRun(query=f"MATCH (n) RETURN {index}", rows=ROWS))
-
-    runs = ledger.runs()
-    # A task can hold at most ten input artifacts, and the last queries are the corrected ones.
-    assert len(runs) == MAX_HANDED_OFF_QUERIES
-    assert runs[-1].query.endswith(f"{MAX_HANDED_OFF_QUERIES + 2}")
-    assert runs[0].query.endswith("3")
 
 
 class Writer:

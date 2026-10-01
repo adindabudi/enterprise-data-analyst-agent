@@ -9,8 +9,6 @@ from agent_framework import (
     todos_remaining,
     todos_remaining_message,
 )
-from eda_worker.context.fabric_readiness import FabricPendingValidationContextProvider
-from eda_worker.fabric.readiness import FabricReadiness, FabricReadinessStatus
 from eda_worker.history.compaction import hard_ceiling_compactor
 from eda_worker.model.profiles import MODEL_PROFILES
 from eda_worker.tools.capabilities import ProgressReporter
@@ -35,16 +33,11 @@ def create_primary_harness(
     *,
     skills_provider: SkillsProvider | None = None,
     document_middleware: Sequence[Any] = (),
-    fabric_readiness: FabricReadiness | None = None,
     progress: ProgressReporter | None = None,
     todo_reporter: TodoReporter | None = None,
     extra_context_providers: Sequence[Any] = (),
 ):
-    active_fabric_readiness = fabric_readiness or FabricReadiness(status=FabricReadinessStatus.DISABLED)
-    _validate_fabric_tools(tools, active_fabric_readiness)
     context_providers: list[Any] = [task_state_provider, *extra_context_providers]
-    if active_fabric_readiness.status is FabricReadinessStatus.CONFIGURED:
-        context_providers.append(FabricPendingValidationContextProvider())
     middleware: list[Any] = list(document_middleware)
     if progress is not None:
         middleware.append(ToolProgressMiddleware(progress))
@@ -76,14 +69,3 @@ def create_primary_harness(
         tokenizer=tokenizer,
         default_options={"store": False, "max_tokens": 64000},
     )
-
-
-def _validate_fabric_tools(tools: list[Any], readiness: FabricReadiness) -> None:
-    names = [getattr(tool, "name", None) for tool in tools]
-    has_query_fabric = "query_fabric" in names
-    if readiness.status is FabricReadinessStatus.FAILED:
-        raise RuntimeError("Fabric readiness failed")
-    if readiness.status is FabricReadinessStatus.READY and not has_query_fabric:
-        raise RuntimeError("ready Fabric requires query_fabric")
-    if readiness.status is not FabricReadinessStatus.READY and has_query_fabric:
-        raise RuntimeError("query_fabric is present while Fabric is not ready")

@@ -21,8 +21,8 @@ class PowerBiProjectStatus(StrEnum):
 class FabricFeatureState(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True, populate_by_name=True)
 
-    id: Literal["feature:fabric", "feature:fabric-ontology"]
-    provider: Literal["semantic_model", "ontology"]
+    id: Literal["feature:fabric-ontology"]
+    provider: Literal["ontology"]
     state: Literal["configured", "ready", "failed"]
     provider_contract_sha256: str = Field(alias="providerContractSha256", pattern=r"^[a-f0-9]{64}$")
     deployment_id: str = Field(alias="deploymentId", min_length=1, max_length=128)
@@ -32,13 +32,6 @@ class FabricFeatureState(BaseModel):
         pattern=r"^[a-f0-9]{64}$",
     )
     verified_at: datetime = Field(alias="verifiedAt")
-
-    @model_validator(mode="after")
-    def validate_provider_id(self) -> FabricFeatureState:
-        expected_id = "feature:fabric-ontology" if self.provider == "ontology" else "feature:fabric"
-        if self.id != expected_id:
-            raise ValueError("Fabric feature ID does not match provider")
-        return self
 
 
 class DocumentFeatureState(BaseModel):
@@ -68,14 +61,16 @@ class DocumentFeatureState(BaseModel):
         return self
 
 
-def fabric_pack_status(*, enabled: bool, feature: FabricFeatureState | None) -> FabricPackStatus:
+def fabric_pack_status(*, enabled: bool, feature: FabricFeatureState | None, source_wired: bool) -> FabricPackStatus:
+    """A loaded schema snapshot makes the ontology pack `configured`; only acceptance evidence makes it `ready`."""
     if not enabled:
         return FabricPackStatus.DISABLED
-    if feature is None or feature.state == "failed":
+    if feature is not None and feature.state == "failed":
         return FabricPackStatus.FAILED
-    if feature.state == "ready":
-        return FabricPackStatus.READY if feature.acceptance_evidence_sha256 is not None else FabricPackStatus.FAILED
-    return FabricPackStatus.CONFIGURED
+    if feature is not None and feature.state == "ready":
+        accepted = feature.acceptance_evidence_sha256 is not None and source_wired
+        return FabricPackStatus.READY if accepted else FabricPackStatus.FAILED
+    return FabricPackStatus.CONFIGURED if source_wired else FabricPackStatus.FAILED
 
 
 def document_pack_status(

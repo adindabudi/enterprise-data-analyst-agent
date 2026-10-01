@@ -7,10 +7,10 @@ from zipfile import ZipFile
 
 EXPECTED = {
     "eda_worker/agent/prompts/claude-opus-4-8-v1.md": (
-        "9e4408e257c61ba7f299ca0512545915f37703f9fb40aeb3416a57b9c372ecb4"
+        "67406b48514af4a32a623a2c38e142e9b10f72dfe50197463a4f338a149678ce"
     ),
     "eda_worker/agent/prompts/gpt-5.6-terra-v1.md": (
-        "a5cb43d04e9f5237f6e620c12af484e79bdc0c36abbfd7dcd4450928137497df"
+        "bd6558f27ea6555a5b03fd610905482322995c2469780791601a980f10e35342"
     ),
 }
 PROMPT_PACKAGE = "eda_worker/agent/prompts/"

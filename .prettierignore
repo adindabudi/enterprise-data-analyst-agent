@@ -15,7 +15,6 @@ services/worker/src/eda_worker/powerbi/templates/**
 *.lock.json
 **/*.lock.json
 tests/fixtures/**
-services/worker/tests/fabric/fixtures/**
 services/worker/tests/fixtures/**
 
 # Static data map.

@@ -123,7 +123,6 @@ prepare_cell() {
     azd_set FABRIC_ENABLED "$FABRIC_ENABLED"
     azd_set FABRIC_PROVIDER "$FABRIC_PROVIDER"
     azd_set FABRIC_TENANT_ID "${FABRIC_TENANT_ID:-}"
-    azd_set FABRIC_SEMANTIC_MODELS_JSON "${FABRIC_SEMANTIC_MODELS_JSON:-{}}"
     azd_set FABRIC_ONTOLOGIES_JSON "${FABRIC_ONTOLOGIES_JSON:-{}}"
     azd_set FABRIC_ACCEPTANCE_PRINCIPAL_ID "$EDA_ACCEPTANCE_PRINCIPAL_ID"
     azd_set DOCUMENTS_ENABLED "$DOCUMENTS_ENABLED"
@@ -176,13 +175,6 @@ run_release_gates() {
     [[ "$EDA_SANDBOX_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || fail "deployed sandbox image is not digest pinned"
 
     make deployed-core-gate
-    if [[ "$FABRIC_ENABLED" == "true" ]]; then
-        if [[ "$FABRIC_PROVIDER" == "semantic_model" ]]; then
-            make acceptance-fabric
-        else
-            make acceptance-fabric-ontology
-        fi
-    fi
     make acceptance-documents
     make supply-chain-gate
     export EDA_EVAL_RESULTS="$(selected_eval_results)"
@@ -347,22 +339,15 @@ FABRIC_ENABLED="${FABRIC_ENABLED:-false}"
 FABRIC_PROVIDER="${FABRIC_PROVIDER:-}"
 DOCUMENTS_ENABLED="${DOCUMENTS_ENABLED:-false}"
 export FABRIC_ENABLED FABRIC_PROVIDER DOCUMENTS_ENABLED
-export FABRIC_ACCEPTANCE_ENABLED=true
 if [[ "$FABRIC_ENABLED" == "true" ]]; then
     require_value FABRIC_AZURE_CONFIG_DIR
     require_value FABRIC_TENANT_ID
     require_private_directory "$FABRIC_AZURE_CONFIG_DIR"
     validate_uuid "$FABRIC_TENANT_ID" || fail "FABRIC_TENANT_ID must be a UUID"
     [[ "$FABRIC_TENANT_ID" != "$AZURE_TENANT_ID" ]] || fail "Fabric acceptance requires a distinct tenant"
-    [[ "$FABRIC_PROVIDER" == "semantic_model" || "$FABRIC_PROVIDER" == "ontology" ]] \
-        || fail "enabled Fabric requires a known provider"
-    if [[ "$FABRIC_PROVIDER" == "semantic_model" ]]; then
-        [[ -n "${FABRIC_SEMANTIC_MODELS_JSON:-}" && "${FABRIC_SEMANTIC_MODELS_JSON}" != "{}" ]] \
-            || fail "semantic-model release requires its catalog"
-    else
-        [[ -n "${FABRIC_ONTOLOGIES_JSON:-}" && "${FABRIC_ONTOLOGIES_JSON}" != "{}" ]] \
-            || fail "ontology release requires its catalog"
-    fi
+    [[ "$FABRIC_PROVIDER" == "ontology" ]] || fail "enabled Fabric requires FABRIC_PROVIDER=ontology"
+    [[ -n "${FABRIC_ONTOLOGIES_JSON:-}" && "${FABRIC_ONTOLOGIES_JSON}" != "{}" ]] \
+        || fail "ontology release requires its catalog"
     export FABRIC_AZURE_CONFIG_DIR FABRIC_TENANT_ID
 elif [[ -n "$FABRIC_PROVIDER" ]]; then
     fail "disabled Fabric must not select a provider"

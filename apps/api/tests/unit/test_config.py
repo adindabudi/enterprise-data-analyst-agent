@@ -134,10 +134,9 @@ def test_api_allows_enabled_ontology_auth_with_optional_direct_query_catalog() -
 
     assert settings.fabric_provider is FabricProvider.ONTOLOGY
     assert tuple(settings.fabric_ontologies) == ("lamna-healthcare",)
-    assert not hasattr(settings, "fabric_semantic_models")
 
 
-@pytest.mark.parametrize("catalog", ["fabric_semantic_models"])
+@pytest.mark.parametrize("catalog", ["powerbi_project_models", "POWERBI_PROJECT_MODELS_JSON"])
 def test_api_rejects_target_catalog_settings(catalog: str) -> None:
     with pytest.raises(ValidationError, match="must not receive provider target catalogs"):
         Settings.model_validate(settings_values(**{catalog: {"untrusted": "target"}}))

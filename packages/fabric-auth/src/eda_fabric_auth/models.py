@@ -11,7 +11,6 @@ from .crypto import CipherEnvelope
 
 
 class FabricProvider(StrEnum):
-    SEMANTIC_MODEL = "semantic_model"
     ONTOLOGY = "ontology"
 
 

@@ -13,13 +13,10 @@ class WorkerSettings(BaseSettings):
 
     app_env: Literal["development", "test", "production"] = "development"
     managed_identity_client_id: UUID | None = None
-    entra_client_id: UUID
     cosmos_endpoint: AnyHttpUrl
     cosmos_database: str = "enterprise-data-analyst"
     cosmos_workspace_container: str = "workspace"
     cosmos_runtime_container: str = "runtime"
-    cosmos_auth_container: str = "auth"
-    cosmos_fabric_auth_container: str = "fabricAuth"
     blob_account_url: AnyHttpUrl
     blob_sessions_container: str = "sessions"
     redis_url: str

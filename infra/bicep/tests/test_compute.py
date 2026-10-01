@@ -41,7 +41,7 @@ def test_container_apps_use_one_api_and_digest_pinned_scheduled_cleanup() -> Non
 
     assert len(environments) == 1
     assert len(apps) == 1
-    assert len(jobs) == 2
+    assert len(jobs) == 1
 
     app_logs = environments[0]["properties"]["appLogsConfiguration"]
     assert app_logs["destination"] == "log-analytics"
@@ -52,8 +52,6 @@ def test_container_apps_use_one_api_and_digest_pinned_scheduled_cleanup() -> Non
 
     api = next(app for app in apps if "api" in str(app["name"]).lower())
     cleanup = next(job for job in jobs if job["properties"]["configuration"]["triggerType"] == "Schedule")
-    acceptance = next(job for job in jobs if job["properties"]["configuration"]["triggerType"] == "Manual")
-    assert "fabricEnabled" in str(acceptance.get("condition", ""))
     api_template = api["properties"]["template"]
 
     assert "azd-service-name" in str(api["tags"])
@@ -156,7 +154,6 @@ def test_bicep_output_aliases_match_deployment_hook_inputs() -> None:
         "API_URL": "appUrl",
         "API_APP_ID": "apiAppId",
         "CLEANUP_JOB_ID": "cleanupJobId",
-        "FABRIC_ACCEPTANCE_JOB_ID": "fabricAcceptanceJobId",
         "DEPLOYMENT_ID": "deploymentId",
         "CONTAINER_REGISTRY_ID": "containerRegistryId",
         "CONTAINER_REGISTRY_LOGIN_SERVER": "containerRegistryLoginServer",

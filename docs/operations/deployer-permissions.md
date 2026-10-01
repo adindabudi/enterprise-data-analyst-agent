@@ -27,18 +27,18 @@ The preflight then verifies that app exists instead of creating one. You still n
 
 The templates create user-assigned managed identities and grant them data-plane roles. Nobody gets a shared key or connection string.
 
-| Identity                        | Gets access to                                                                                     |
-| ------------------------------- | -------------------------------------------------------------------------------------------------- |
-| API                             | Cosmos DB, Blob Storage, Redis, the Foundry model (Cognitive Services User), ACA Sandbox execution |
-| Cleanup and acceptance job UAMI | Cosmos DB, Blob Storage, Redis, Container Registry, selected Fabric resources                      |
+| Identity         | Gets access to                                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| API              | Cosmos DB, Blob Storage, Redis, the Foundry model (Cognitive Services User), ACA Sandbox execution |
+| Cleanup job UAMI | Cosmos DB, Blob Storage, Container Registry                                                        |
 
 The exact role definition IDs are in `scripts/rbac-assignments.json` and mirrored in `infra/bicep/modules/` and `infra/terraform/modules/`.
 
 ## Fabric needs more
 
-Enabling a Fabric pack adds a second tenant and a second application. That app is registered in the Fabric tenant, uses a certificate rather than a secret, and needs delegated Power BI permissions with admin consent.
+Enabling the Fabric ontology pack adds a second application. That app is registered in the Fabric tenant, uses a certificate rather than a secret, and needs delegated Power BI permissions with admin consent.
 
-Full sequence: [fabric-iq.md](../runbooks/fabric-iq.md) for the semantic model, [fabric-ontology-lab.md](../runbooks/fabric-ontology-lab.md) for the ontology.
+Full sequence: [fabric-ontology-lab.md](../runbooks/fabric-ontology-lab.md).
 
 ## Common failures
 

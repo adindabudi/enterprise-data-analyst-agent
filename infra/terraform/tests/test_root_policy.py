@@ -79,7 +79,6 @@ def test_outputs_keep_azd_bridge_values_and_optional_job_gates() -> None:
         'output "api_url"',
         'output "api_app_id"',
         'output "cleanup_job_id"',
-        'output "fabric_acceptance_job_id"',
         'output "sandbox_group_id"',
     ):
         assert name in outputs

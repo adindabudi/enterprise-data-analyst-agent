@@ -31,8 +31,6 @@ export function fabricSourceName(context: FabricSourceContext): string {
   if (context.authorization?.source)
     return context.authorization.source.description;
   if (context.authorization?.provider === "ontology") return "Fabric ontology";
-  if (context.authorization?.provider === "semantic_model")
-    return "Fabric semantic model";
   return "Fabric source";
 }
 

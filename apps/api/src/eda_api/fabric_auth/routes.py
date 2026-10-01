@@ -46,7 +46,7 @@ class FabricSourceMetadata(BaseModel):
 class FabricAuthStatus(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    provider: Literal["semantic_model", "ontology"]
+    provider: Literal["ontology"]
     state: Literal["unlinked", "linked", "reauth_required"]
     chat_query: bool = Field(serialization_alias="chatQuery")
     source: FabricSourceMetadata | None = None
@@ -132,7 +132,7 @@ async def status_view(
     config: Annotated[Settings, Depends(settings)],
 ) -> FabricAuthStatus:
     source = None
-    if provider.value == "ontology" and config.fabric_ontologies:
+    if config.fabric_ontologies:
         alias, target = next(iter(config.fabric_ontologies.items()))
         source = FabricSourceMetadata(alias=alias, description=target.description)
     return FabricAuthStatus(

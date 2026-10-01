@@ -120,50 +120,47 @@ module "cosmos" {
 }
 
 module "redis" {
-  source                       = "./modules/redis"
-  redis_name                   = local.names.redis_enterprise
-  location                     = var.location
-  profile                      = var.profile
-  redis_sku                    = var.redis_sku
-  resource_group_name          = module.resource_group.name
-  subscription_id              = data.azurerm_client_config.current.subscription_id
-  tags                         = local.tags
-  web_identity_principal_id    = module.identities.web_identity_principal_id
-  worker_identity_principal_id = module.identities.worker_identity_principal_id
-  private_endpoints_subnet_id  = module.network.private_endpoints_subnet_id
-  private_dns_zone_id          = module.network.redis_private_dns_zone_id
+  source                      = "./modules/redis"
+  redis_name                  = local.names.redis_enterprise
+  location                    = var.location
+  profile                     = var.profile
+  redis_sku                   = var.redis_sku
+  resource_group_name         = module.resource_group.name
+  subscription_id             = data.azurerm_client_config.current.subscription_id
+  tags                        = local.tags
+  web_identity_principal_id   = module.identities.web_identity_principal_id
+  private_endpoints_subnet_id = module.network.private_endpoints_subnet_id
+  private_dns_zone_id         = module.network.redis_private_dns_zone_id
 }
 
 module "foundry" {
-  source                       = "./modules/foundry"
-  agent_subnet_id              = module.network.foundry_agent_subnet_id
-  foundry_name                 = local.names.foundry_account
-  location                     = var.location
-  resource_group_name          = module.resource_group.name
-  subscription_id              = data.azurerm_client_config.current.subscription_id
-  tags                         = local.tags
-  web_identity_principal_id    = module.identities.web_identity_principal_id
-  worker_identity_principal_id = module.identities.worker_identity_principal_id
-  model_profile                = var.model_profile
-  model_capacity               = var.model_capacity
+  source                    = "./modules/foundry"
+  agent_subnet_id           = module.network.foundry_agent_subnet_id
+  foundry_name              = local.names.foundry_account
+  location                  = var.location
+  resource_group_name       = module.resource_group.name
+  subscription_id           = data.azurerm_client_config.current.subscription_id
+  tags                      = local.tags
+  web_identity_principal_id = module.identities.web_identity_principal_id
+  model_profile             = var.model_profile
+  model_capacity            = var.model_capacity
 }
 
 module "fabric_auth" {
-  source                       = "./modules/fabric_auth"
-  count                        = var.fabric_enabled ? 1 : 0
-  enabled                      = var.fabric_enabled
-  location                     = var.location
-  resource_group_name          = module.resource_group.name
-  subscription_id              = data.azurerm_client_config.current.subscription_id
-  tenant_id                    = local.tenant_id
-  tags                         = local.tags
-  vault_name                   = local.names.key_vault
-  provisioning_identity_name   = "id-fabric-provision-${local.name_suffix}"
-  signing_certificate_name     = var.fabric_signing_certificate_name
-  cache_wrap_key_name          = var.fabric_cache_wrap_key_name
-  web_identity_principal_id    = module.identities.web_identity_principal_id
-  worker_identity_principal_id = module.identities.worker_identity_principal_id
-  acceptance_principal_id      = var.acceptance_principal_id
+  source                     = "./modules/fabric_auth"
+  count                      = var.fabric_enabled ? 1 : 0
+  enabled                    = var.fabric_enabled
+  location                   = var.location
+  resource_group_name        = module.resource_group.name
+  subscription_id            = data.azurerm_client_config.current.subscription_id
+  tenant_id                  = local.tenant_id
+  tags                       = local.tags
+  vault_name                 = local.names.key_vault
+  provisioning_identity_name = "id-fabric-provision-${local.name_suffix}"
+  signing_certificate_name   = var.fabric_signing_certificate_name
+  cache_wrap_key_name        = var.fabric_cache_wrap_key_name
+  web_identity_principal_id  = module.identities.web_identity_principal_id
+  acceptance_principal_id    = var.acceptance_principal_id
   force_update_tag = sha256(jsonencode({
     profile        = var.profile
     fabric_enabled = var.fabric_enabled
@@ -200,7 +197,6 @@ module "container_apps" {
   fabric_key_vault_url             = var.fabric_enabled ? module.fabric_auth[0].vault_uri : ""
   fabric_signing_certificate_name  = var.fabric_signing_certificate_name
   fabric_cache_wrap_key_name       = var.fabric_cache_wrap_key_name
-  fabric_semantic_models_json      = var.fabric_semantic_models_json
   fabric_ontologies_json           = var.fabric_ontologies_json
   location                         = var.location
   log_analytics_shared_key         = module.monitoring.log_analytics_shared_key

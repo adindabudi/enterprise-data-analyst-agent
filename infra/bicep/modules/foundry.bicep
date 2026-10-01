@@ -2,7 +2,6 @@ param foundryName string
 param location string
 param tags object
 param webIdentityPrincipalId string
-param workerIdentityPrincipalId string
 param agentSubnetId string
 param modelProfile 'gpt-5.6-terra-medium-v1'
 param modelCapacity int
@@ -70,19 +69,6 @@ resource terra 'Microsoft.CognitiveServices/accounts/deployments@2025-10-01-prev
   dependsOn: [
     project
   ]
-}
-
-resource workerCognitiveServicesUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(account.id, workerIdentityPrincipalId, 'a97b65f3-24c7-4388-baec-2e87135dc908')
-  scope: account
-  properties: {
-    principalId: workerIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      'a97b65f3-24c7-4388-baec-2e87135dc908'
-    )
-  }
 }
 
 resource webCognitiveServicesUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

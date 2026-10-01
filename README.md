@@ -83,15 +83,14 @@ curl -s "$(azd env get-value API_URL)/health/ready" | jq
 
 ### Optional packs
 
-Every pack is fail-closed. Setting a flag makes it `configured`; only its acceptance gate can promote it to `ready`. A prior deployment, a passing local test, or a same-tenant smoke never counts as evidence.
+Every pack is fail-closed. Setting a flag makes it `configured`; only its acceptance gate can promote it to `ready`. A prior deployment or a passing local test never counts as evidence.
 
 | Pack                       | Flags               | Guide                                                          |
 | -------------------------- | ------------------- | -------------------------------------------------------------- |
-| Fabric semantic model      | `FABRIC_ENABLED`    | [fabric-iq.md](docs/runbooks/fabric-iq.md)                     |
 | Fabric ontology            | `FABRIC_ENABLED`    | [fabric-ontology-lab.md](docs/runbooks/fabric-ontology-lab.md) |
 | Documents: DOCX, PDF, PPTX | `DOCUMENTS_ENABLED` | [document-pack.md](docs/runbooks/document-pack.md)             |
 
-Fabric also requires two distinct tenants: your product tenant and a separate Fabric tenant. A same-tenant setup can be used to try things out, but it can never reach `ready`.
+The Fabric ontology pack reports `configured` once its published schema snapshot loads, and stays there until an acceptance gate for the schema snapshot path exists; nothing promotes it to `ready` today. The API wires its query tools only when the Fabric tenant is your product tenant.
 
 The Fabric ontology source answers from a schema snapshot, not from run-time discovery. An operator job reads the ontology once, when it changes (entity types and time-series bindings from the ontology MCP, relationships and stored values through GQL), and the runtime pins that snapshot in the agent's instructions. The agent then writes its own queries: GQL against the ontology's graph and KQL against the Eventhouse that holds its time series, both with the signed-in user's Fabric token. In the Fabric tool-path benchmark, this answered 12 of 12 questions in about 10 seconds each, where discovering the schema per question took twice as long and used six times the input tokens. Without a published snapshot the source has no query tools. See [publish the schema snapshot](docs/runbooks/fabric-ontology-lab.md#publish-the-schema-snapshot).
 
@@ -107,7 +106,7 @@ The HTML bundler checks the final file in offline Chromium before writing its ou
 
 Cosmos DB stores sessions, canonical messages, tasks, checklists, and published file metadata. Blob Storage stores the published file bytes. The workspace restores saved analyses through owner-scoped APIs and lists files from every task in the session, including after a browser reload or API container restart.
 
-Interactive model context is also stored in Cosmos DB; Redis supplies disposable live-event projections and a migration fallback for older context. Context larger than 512,000 characters is discarded with a warning, without deleting canonical message history. Sessions and tasks keep their existing 30-day retention. Unpublished sandbox scratch files are temporary and are not recoverable outputs.
+Redis supplies disposable live-event projections. Sessions and tasks keep their 30-day retention. Unpublished sandbox scratch files are temporary and are not recoverable outputs.
 
 ### Runbooks
 

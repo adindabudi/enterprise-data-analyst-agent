@@ -9,7 +9,6 @@ from .models import (
 )
 from .msal_cache import (
     FABRIC_RESOURCE_AUDIENCE,
-    SEMANTIC_MODEL_APPLICATION_SCOPES,
     FabricAuthorizationRequired,
     FabricMsalAuthorizationCodeService,
     FabricMsalSilentTokenService,
@@ -30,7 +29,6 @@ __all__ = [
     "FABRIC_RESOURCE_AUDIENCE",
     "ONTOLOGY_BYO_SCOPES",
     "ONTOLOGY_DIRECT_REFERENCE_SCOPE",
-    "SEMANTIC_MODEL_APPLICATION_SCOPES",
     "CipherEnvelope",
     "CosmosFabricGrantRepository",
     "EnvelopeCipher",

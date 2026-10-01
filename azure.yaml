@@ -27,8 +27,8 @@ hooks:
   postprovision:
     shell: sh
     dir: .
-    run: uv run python scripts/sync-bicep-outputs.py && ./scripts/configure-fabric-entra.sh finalize && ./scripts/run-fabric-provider-hook.sh postprovision && ./scripts/build-worker-image.sh && ./scripts/build-sandbox-image.sh && ./scripts/deploy-sandbox-group.sh && ./scripts/configure-entra-federation.sh
+    run: uv run python scripts/sync-bicep-outputs.py && ./scripts/configure-fabric-entra.sh finalize && ./scripts/build-worker-image.sh && ./scripts/build-sandbox-image.sh && ./scripts/deploy-sandbox-group.sh && ./scripts/configure-entra-federation.sh
   postdeploy:
     shell: sh
     dir: .
-    run: ./scripts/doctor-documents.sh --phase postdeploy --output .artifacts/document-image-contract.json && ./scripts/publish-document-contract-job.sh && ./scripts/pin-application-images.sh && ./scripts/run-fabric-provider-hook.sh postdeploy && ./scripts/deploy-smoke.sh
+    run: ./scripts/doctor-documents.sh --phase postdeploy --output .artifacts/document-image-contract.json && ./scripts/publish-document-contract-job.sh && ./scripts/pin-application-images.sh && ./scripts/deploy-smoke.sh

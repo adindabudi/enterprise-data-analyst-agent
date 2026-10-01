@@ -30,13 +30,10 @@ def worker_settings(config: Settings) -> WorkerSettings:
         {
             "app_env": config.app_env,
             "managed_identity_client_id": config.managed_identity_client_id,
-            "entra_client_id": config.entra_client_id,
             "cosmos_endpoint": config.cosmos_endpoint,
             "cosmos_database": config.cosmos_database,
             "cosmos_workspace_container": config.cosmos_workspace_container,
             "cosmos_runtime_container": config.cosmos_runtime_container,
-            "cosmos_auth_container": config.cosmos_auth_container,
-            "cosmos_fabric_auth_container": config.cosmos_fabric_auth_container,
             "blob_account_url": config.blob_account_url,
             "blob_sessions_container": config.blob_sessions_container,
             "redis_url": config.redis_url,

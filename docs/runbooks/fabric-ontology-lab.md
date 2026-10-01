@@ -1,16 +1,16 @@
-# Fabric Ontology Acceptance Lab
+# Fabric Ontology Lab
 
-This runbook creates and validates the external Lamna Healthcare acceptance fixture for the optional Fabric ontology provider. The fixture contains fictitious, synthetic data only. Do not upload PHI or any production data.
+This runbook creates the external Lamna Healthcare fixture for the optional Fabric ontology provider and connects a deployment to it. The fixture contains fictitious, synthetic data only. Do not upload PHI or any production data.
 
 The Fabric workspace is operator-owned SaaS infrastructure. Item creation remains manual because this repository has not verified a stable public ontology item-definition API. Do not use Bicep, Terraform, or other IaC to create a Fabric workspace, lakehouse, Eventhouse, semantic model, or ontology item.
 
 ## Preconditions
 
-- Use Fabric tenant D, distinct from the Foundry/product tenant F required by the cross-tenant gate.
+- Use Fabric tenant D. The API wires the query tools only when tenant D is also the product tenant.
 - Create a dedicated nonproduction workspace named `eda-ontology-acceptance-<suffix>`.
-- Assign paid F2+ or P1+ capacity before MCP acceptance. A trial capacity may be used to follow the lab, but it is not acceptance evidence.
-- Set both ontology tenant settings: `FOUNDRY_TENANT_ID` and `FABRIC_ONTOLOGY_TENANT_ID`.
-- Create one allowed and one denied B2B test user. The denied user has no ontology or bound-source access.
+- Assign paid F2+ or P1+ capacity. A trial capacity may be used to follow the lab.
+- Set `FABRIC_ONTOLOGY_TENANT_ID` to tenant D for the cleanup script.
+- Create one allowed and one denied test user. The denied user has no ontology or bound-source access.
 
 ## Build The Fixture
 
@@ -20,22 +20,29 @@ The Fabric workspace is operator-owned SaaS infrastructure. Item creation remain
 4. Create Direct Lake semantic model `LamnaHealthcareModel` from the five lakehouse tables. Define four Direct Lake relationships from the pinned fixture contract, all many-to-one and bidirectional.
 5. Generate ontology `LamnaHealthcareOntology`. Verify five entity keys and configure four relationship bindings from the fixture contract.
 6. Bind the Eventhouse time series to `VitalSignEquipment`, using `EquipmentId` as the key and `Timestamp` plus the four reading properties.
-7. Mark the ontology as published before any MCP contract discovery. Store the workspace and ontology item UUIDs only in secret-managed deployment configuration; never place them in prompts, source, or public artifacts.
-8. Grant only the required item and source permissions to the allowed B2B fixture user. Confirm the denied user gets no data and no result artifact.
+7. Mark the ontology as published before you build the schema snapshot. Store the workspace and ontology item UUIDs only in secret-managed deployment configuration; never place them in prompts, source, or public artifacts.
+8. Grant only the required item and source permissions to the allowed fixture user. Confirm the denied user gets no data and no result artifact.
 
-## Validate
+## Connect a deployment
 
-Prepare a mode-0700 isolated Azure CLI context outside the repository and provide its path through `FABRIC_ONTOLOGY_AZURE_CONFIG_DIR`. The doctor never mutates global Azure CLI context and never invokes login, logout, account switching, or provisioning.
+Set these values in the selected azd environment:
 
-Provide the selected target catalog, paid-capacity evidence, and denied-user no-data probe as nonsecret local paths, then run:
-
-```sh
-./scripts/doctor-fabric-ontology.sh
+```text
+FABRIC_ENABLED=true
+FABRIC_PROVIDER=ontology
+FABRIC_TENANT_ID=<tenant D>
+FABRIC_TOPOLOGY=same_tenant_smoke
+FABRIC_ONTOLOGIES_JSON=<catalog with exactly one ontology>
+FABRIC_ACCEPTANCE_PRINCIPAL_ID=<product-tenant principal that runs finalize>
+FABRIC_AZURE_CONFIG_DIR=<mode-0700 tenant-D context>
+PRODUCT_AZURE_CONFIG_DIR=<mode-0700 product-tenant context>
 ```
 
-The doctor only reports hashes, counts, and pass/fail status. It validates distinct tenant hashes, the selected `ontology` provider, app access through the prepared context, the F2+/P1+ evidence, catalog and fixture shape, B2B fixture identities, publication/reachability, the exact two-tool MCP contract, entity-key discovery, and the denied-user no-data result.
+`azd provision` runs `scripts/configure-fabric-entra.sh bootstrap` and `scripts/run-fabric-provider-hook.sh preprovision` before it provisions, and `configure-fabric-entra.sh finalize` after. Bootstrap creates or reuses one single-tenant, credential-free application in tenant D with only delegated `Item.Read.All` and `Item.Execute.All`. The provider hook stops provisioning unless the provider is `ontology` and the catalog is set. Finalize sets the callback URI and uploads only the public Key Vault certificate; grant consent after it. No client secret is supported.
 
-After doctor succeeds, publish the contract, optionally run the same-tenant smoke, and run the cross-tenant acceptance gate. The smoke cannot promote readiness.
+## Readiness
+
+The API wires the query tools when the Fabric tenant is the product tenant, the catalog holds exactly one ontology, and the published schema snapshot loads and describes that source. The pack then reports `configured`. It reports `failed` when Fabric is enabled but no usable snapshot loads, or when the `feature:fabric-ontology` record in the runtime container is set to `failed`, which turns the source off. Only that record, with acceptance evidence, can report `ready`, and nothing in this repository writes it until the snapshot path has an acceptance gate.
 
 ## Publish the schema snapshot
 
@@ -78,14 +85,14 @@ Publish the reviewed file, then restart the API revision so the runtime loads it
 uv run python scripts/build-fabric-schema-snapshot.py --input .artifacts/fabric-schema-snapshot.json --publish
 ```
 
-Publishing writes `fabric-schema-snapshot:<alias>` to the runtime container with your Azure CLI identity, which needs Cosmos DB data-plane write access. Like the contract scripts, run it from inside the VNet when Cosmos DB public access is disabled.
+Publishing writes `fabric-schema-snapshot:<alias>` to the runtime container with your Azure CLI identity, which needs Cosmos DB data-plane write access. Run it from inside the VNet when Cosmos DB public access is disabled.
 
 Run the job again whenever entity types, properties, relationships, time-series bindings or categorical values change. Each run reads the ontology definition, which Fabric meters, and wakes the graph if it is idle. Answering a question does neither.
 
 Notes:
 
 - The GQL Query API is beta (`beta=true`). A still-running query is followed through its continuation token for up to 120 seconds; a truncated response is flagged so no total is reported from it.
-- The KQL route was checked with an Azure CLI user token. Confirm that your Fabric app's delegated grant reaches the KQL database's MCP endpoint in the acceptance tenant before you rely on it.
+- The KQL route was checked with an Azure CLI user token. Confirm that your Fabric app's delegated grant reaches the KQL database's MCP endpoint in tenant D before you rely on it.
 - The Fabric capacity status check still opens the ontology endpoint, without calling a tool, when a linked user opens the workspace and no recent reading exists. In the Fabric tool-path benchmark, an opened ontology session started the _Ontology Modeling_ meter window.
 
 ## Separate Indonesian Upstream Demo
@@ -178,4 +185,4 @@ Destructive execution requires the exact workspace UUID twice, the matching expe
   --execute
 ```
 
-The script point-reads the workspace under tenant D, checks its exact name and ownership manifest, deletes only `https://api.fabric.microsoft.com/v1/workspaces/{workspaceId}`, and waits for the workspace to disappear. It does not delete a resource group as a Fabric cleanup mechanism, delete or pause capacity, remove B2B users, or delete the Entra application. Handle those actions separately and only after the workspace cleanup is confirmed.
+The script point-reads the workspace under tenant D, checks its exact name and ownership manifest, deletes only `https://api.fabric.microsoft.com/v1/workspaces/{workspaceId}`, and waits for the workspace to disappear. It does not delete a resource group as a Fabric cleanup mechanism, delete or pause capacity, remove test users, or delete the Entra application. Handle those actions separately and only after the workspace cleanup is confirmed.

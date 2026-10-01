@@ -19,7 +19,7 @@ Work in an isolated worktree, not on a shared checkout.
 | --------------------- | ---------------------------------------------------------------------------- |
 | `apps/api`            | HTTP surface: auth, sessions, chat streaming, artifact downloads             |
 | `apps/web`            | React workspace                                                              |
-| `services/worker`     | Durable orchestration, agent harness, tools, Fabric providers                |
+| `services/worker`     | Durable orchestration, agent harness, tools                                  |
 | `services/sandbox`    | Code execution and artifact validation                                       |
 | `packages/contracts`  | Shared models; the JSON Schema and TypeScript types are generated from these |
 | `packages/artifacts`  | Format validators (XLSX, HTML, PDF, OOXML, PBIR)                             |

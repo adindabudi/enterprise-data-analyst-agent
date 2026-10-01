@@ -4,7 +4,6 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any, cast
 
 from agent_framework import SkillsProvider
@@ -14,11 +13,9 @@ from azure.identity import ManagedIdentityCredential as SyncManagedIdentityCrede
 from azure.identity.aio import ManagedIdentityCredential
 from azure.storage.blob.aio import BlobServiceClient
 from eda_contracts import ArtifactKind, ArtifactRef, ProgressState
-from eda_fabric_auth import CosmosFabricGrantRepository, EnvelopeCipher, FabricProvider, KeyVaultKeyWrapper
 from eda_runtime_state.events import EventDraft, RedisEventStore
 from eda_runtime_state.redis_auth import create_redis_credential_provider
 from eda_runtime_state.tasks import CosmosRuntimeStateRepository, RuntimeStateRepository
-from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -35,36 +32,13 @@ from .documents.readiness import (
     load_document_runtime_readiness,
 )
 from .documents.runner import DocumentSkillScriptRunner, DocumentTaskScopeMiddleware
-from .fabric.config import FabricSettings
-from .fabric.contracts import FabricPrincipal, FabricQueryOperation, FabricSourceGuide
-from .fabric.gateway import ArtifactFabricResultStore, FabricIQGateway
-from .fabric.mcp_client import FabricMcpClient
-from .fabric.ontology.capability import CosmosOntologyQueryRepository, FabricOntologyCapabilityGateway
-from .fabric.ontology.contracts import FabricOntologyQueryOperation
-from .fabric.ontology.gateway import FabricOntologyGateway
-from .fabric.ontology.mcp_client import OntologyMcpClient
-from .fabric.ontology.readiness import (
-    OntologyProviderRuntimeContract,
-    load_ontology_runtime_state,
-    ontology_provider_contract_sha256,
-)
-from .fabric.planner import FabricAnalystPlanner, FabricPlanningClient
-from .fabric.provenance import CosmosFabricQueryRepository, FabricQueryRecorder
-from .fabric.readiness import (
-    FabricModelIdentity,
-    FabricReadiness,
-    FabricReadinessStatus,
-    FabricRuntimeState,
-    load_fabric_runtime_state,
-)
-from .fabric.token_provider import FabricAccessTokenProvider
 from .finalization import CoreTaskFinalizer
 from .history.provider import ProjectionHistoryProvider
 from .history.repository import CosmosProjectionRepository
 from .history.todos import SessionOpenTodos
 from .model.client import create_foundry_client
 from .model.profiles import WorkClass
-from .model.startup import StartupModelState, load_startup_model_state
+from .model.startup import load_startup_model_state
 from .output_planning import OutputContractPlanner, OutputPlanningClient
 from .sandbox.aca_client import AcaSandboxClient
 from .sandbox.gateway import CosmosBlobArtifactGatewayStore, DynamicSessionCapabilityGateway
@@ -143,11 +117,10 @@ async def build_analysis_runtime(
 ) -> AnalysisRuntime:
     """Assemble the analyst runtime.
 
-    `source_tools` are data-source tools owned by the host application. When given,
-    they replace the worker's own Fabric gateway: the host already holds the
-    authorised source adapters, and one engine must not reach the same source
-    through two different paths. `source_context` are the host's context providers
-    for those tools, such as the source's pinned schema snapshot.
+    `source_tools` are the only data-source tools, and the host application owns
+    them because it already holds the authorised source adapters. `source_context`
+    are the host's context providers for those tools, such as the source's pinned
+    schema snapshot.
     """
     injected_source_tools = tuple(source_tools)
     startup = load_startup_model_state(settings)
@@ -263,183 +236,18 @@ async def build_analysis_runtime(
             disable_run_skill_script_approval=True,
         )
 
-        fabric_settings = FabricSettings()
-        if injected_source_tools:
-            fabric_settings = fabric_settings.model_copy(update={"enabled": False})
-        active_model = _fabric_model_identity(startup)
-        semantic_contract = None
-        ontology_contract: OntologyProviderRuntimeContract | None = None
-        if fabric_settings.enabled and fabric_settings.provider is FabricProvider.ONTOLOGY:
-            ontology_state = await load_ontology_runtime_state(
-                cast(Any, runtime_container),
-                enabled=True,
-                catalog=fabric_settings.ontologies,
-                active_model=active_model,
-                deployment_id=settings.deployment_id,
-            )
-            fabric_readiness = ontology_state.readiness
-            ontology_contract = ontology_state.contract
-        else:
-            semantic_state = await _load_semantic_fabric_state(
-                fabric_settings=fabric_settings,
-                runtime_container=runtime_container,
-                startup=startup,
-                deployment_id=settings.deployment_id,
-            )
-            fabric_readiness = semantic_state.readiness
-            semantic_contract = semantic_state.contract
-        fabric_readiness = isolate_optional_fabric_failure(fabric_readiness)
-        fabric_gateway: Any = None
-        source_guides: tuple[FabricSourceGuide, ...] = ()
-        fabric_operation_model: type[BaseModel] = FabricQueryOperation
-        if fabric_readiness.status is FabricReadinessStatus.READY:
-            if (
-                fabric_settings.tenant_id is None
-                or fabric_settings.client_id is None
-                or fabric_settings.key_vault_url is None
-                or fabric_settings.signing_certificate_name is None
-                or fabric_settings.cache_wrap_key_name is None
-            ):
-                raise RuntimeError("ready selected Fabric configuration is incomplete")
-            grant_repository = CosmosFabricGrantRepository(
-                cast(Any, database.get_container_client(settings.cosmos_auth_container)),
-                cast(Any, database.get_container_client(settings.cosmos_fabric_auth_container)),
-            )
-            key_vault_url = str(fabric_settings.key_vault_url).rstrip("/")
-            key_wrapper = KeyVaultKeyWrapper(
-                f"{key_vault_url}/keys/{fabric_settings.cache_wrap_key_name}",
-                credential,
-            )
-            resources.push_async_callback(key_wrapper.close)
-            cipher = EnvelopeCipher(key_wrapper)
-            token_provider = FabricAccessTokenProvider(
-                repository=grant_repository,
-                cipher=cipher,
-                fabric_tenant_id=fabric_settings.tenant_id,
-                fabric_client_id=fabric_settings.client_id,
-                key_vault_url=key_vault_url,
-                signing_certificate_name=fabric_settings.signing_certificate_name,
-                credential=sync_credential,
-            )
-            resources.callback(token_provider.close)
-            if fabric_settings.provider is FabricProvider.SEMANTIC_MODEL:
-                contract = semantic_contract
-                if contract is None:
-                    raise RuntimeError("ready semantic Fabric contract is unavailable")
-                expected_tools = tuple(
-                    {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "inputSchema": tool.input_schema,
-                    }
-                    for tool in contract.tools
-                )
-
-                def planner_factory(principal: FabricPrincipal) -> FabricAnalystPlanner:
-                    async def owner_token() -> str:
-                        token = await token_provider.acquire_for_principal(
-                            principal=principal,
-                            provider=FabricProvider.SEMANTIC_MODEL,
-                        )
-                        return token.token
-
-                    mcp_client = FabricMcpClient(
-                        token_provider=owner_token,
-                        expected_tools=expected_tools,
-                    )
-                    return FabricAnalystPlanner(
-                        cast(FabricPlanningClient, foundry_client),
-                        mcp_client,
-                        model_options=startup.contract.options_for(WorkClass.ANALYSIS),
-                        max_turns=fabric_settings.max_analyst_turns,
-                    )
-
-                fabric_gateway = FabricIQGateway(
-                    planner_factory=planner_factory,
-                    runtime=runtime_repository,
-                    result_store=ArtifactFabricResultStore(artifact_store),
-                    models=fabric_settings.models,
-                    evidence_recorder=FabricQueryRecorder(
-                        artifact_store=artifact_store,
-                        repository=CosmosFabricQueryRepository(workspace_container),
-                    ),
-                )
-                source_guides = tuple(
-                    FabricSourceGuide(
-                        alias=alias,
-                        description=target.description,
-                        vocabulary=target.routing_terms,
-                    )
-                    for alias, target in sorted(fabric_settings.models.items())
-                )
-            elif fabric_settings.provider is FabricProvider.ONTOLOGY:
-                contract = ontology_contract
-                if contract is None:
-                    raise RuntimeError("ready ontology Fabric contract is unavailable")
-                grounding_digests = {alias.alias: alias.grounding_sha256 for alias in contract.aliases}
-
-                def ontology_gateway_factory(principal: FabricPrincipal) -> FabricOntologyGateway:
-                    async def owner_token() -> str:
-                        token = await token_provider.acquire_for_principal(
-                            principal=principal,
-                            provider=FabricProvider.ONTOLOGY,
-                        )
-                        return token.token
-
-                    return FabricOntologyGateway(
-                        catalog=fabric_settings.ontologies,
-                        client_factory=lambda target: OntologyMcpClient(
-                            target,
-                            token_provider=owner_token,
-                        ),
-                        expected_grounding_digests=grounding_digests,
-                    )
-
-                fabric_gateway = FabricOntologyCapabilityGateway(
-                    catalog=fabric_settings.ontologies,
-                    gateway_factory=ontology_gateway_factory,
-                    runtime=runtime_repository,
-                    artifacts=artifact_store,
-                    evidence=CosmosOntologyQueryRepository(workspace_container),
-                    provider_contract_digest=ontology_provider_contract_sha256(contract),
-                )
-                source_guides = tuple(alias.model_guide() for alias in contract.aliases)
-                fabric_operation_model = FabricOntologyQueryOperation
-            else:
-                raise RuntimeError("ready Fabric provider is unsupported")
-
         task_state = RuntimeTaskStateRepository(runtime_repository, projection_repository)
 
-        tools = create_capability_tools(
-            capability_gateway,
-            fabric_gateway,
-            source_guides=source_guides,
-            fabric_operation_model=fabric_operation_model,
-            progress=report_progress,
-        )
-        harness_fabric_readiness = fabric_readiness
-        if injected_source_tools:
-            tools = [*tools, *injected_source_tools]
-            injected_names = {getattr(tool, "name", None) for tool in injected_source_tools}
-            harness_fabric_readiness = FabricReadiness(
-                status=FabricReadinessStatus.READY
-                if "query_fabric" in injected_names
-                else FabricReadinessStatus.DISABLED
-            )
+        tools = [*create_capability_tools(capability_gateway, progress=report_progress), *injected_source_tools]
         harness = create_primary_harness(
             client=foundry_client,
             history_provider=ProjectionHistoryProvider(projection_repository),
-            task_state_provider=TaskStateContextProvider(
-                task_state,
-                # query_fabric is registered only at READY, so this is also "has a source tool".
-                can_read_source=bool(injected_source_tools) or fabric_readiness.status is FabricReadinessStatus.READY,
-            ),
+            task_state_provider=TaskStateContextProvider(task_state, can_read_source=bool(injected_source_tools)),
             tools=tools,
             tokenizer=startup.tokenizer,
             prompt=startup.prompt,
             skills_provider=skills_provider,
             document_middleware=document_middleware,
-            fabric_readiness=harness_fabric_readiness,
             progress=report_progress,
             todo_reporter=create_todo_reporter(runtime_repository, event_store),
             extra_context_providers=tuple(source_context),
@@ -450,7 +258,6 @@ async def build_analysis_runtime(
             projection_repository=projection_repository,
             command_repository=runtime_repository,
             model_contract=startup.contract,
-            product_audience=settings.entra_client_id,
         )
         finalizer = CoreTaskFinalizer(
             runtime_repository,
@@ -484,41 +291,3 @@ async def build_analysis_runtime(
     except BaseException:
         await resources.aclose()
         raise
-
-
-async def _load_semantic_fabric_state(
-    *,
-    fabric_settings: FabricSettings,
-    runtime_container: object,
-    startup: StartupModelState,
-    deployment_id: str,
-) -> FabricRuntimeState:
-    selected = fabric_settings.enabled and fabric_settings.provider is FabricProvider.SEMANTIC_MODEL
-    return await load_fabric_runtime_state(
-        cast(Any, runtime_container),
-        enabled=selected,
-        fabric_tenant_id=fabric_settings.tenant_id,
-        active_model=_fabric_model_identity(startup),
-        deployment_id=deployment_id,
-        now=datetime.now(UTC),
-    )
-
-
-def isolate_optional_fabric_failure(readiness: FabricReadiness) -> FabricReadiness:
-    if readiness.status is not FabricReadinessStatus.FAILED:
-        return readiness
-    logging.getLogger(__name__).error("Fabric Pack readiness failed; continuing without Fabric tools")
-    return FabricReadiness(status=FabricReadinessStatus.DISABLED)
-
-
-def _fabric_model_identity(startup: StartupModelState) -> FabricModelIdentity:
-    contract = startup.contract
-    return FabricModelIdentity(
-        modelProfile=contract.model_profile.value,
-        modelDeployment=contract.deployment,
-        servedModel=contract.base_model,
-        servedSnapshot=contract.base_model_snapshot,
-        promptVersion=contract.prompt_version,
-        promptSha256=contract.prompt_sha256,
-        requestOptionsSha256=contract.request_options_sha256,
-    )

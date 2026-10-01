@@ -136,8 +136,6 @@ def base_environment(tmp_path: Path, output_json: str) -> dict[str, str]:
         "ensure-entra-app.sh",
         "preflight-model.sh",
         "configure-entra-federation.sh",
-        "doctor-fabric.sh",
-        "doctor-fabric-ontology.sh",
         "configure-fabric-entra.sh",
         "run-fabric-provider-hook.sh",
         "run-document-acceptance.sh",
@@ -187,8 +185,6 @@ def base_environment(tmp_path: Path, output_json: str) -> dict[str, str]:
             "BUILD_WORKER_IMAGE_CMD": str(tmp_path / "build-worker-image.sh"),
             "BUILD_SANDBOX_IMAGE_CMD": str(tmp_path / "build-sandbox-image.sh"),
             "CREATE_SANDBOX_DISK_IMAGE_CMD": str(tmp_path / "create-sandbox-disk-image.sh"),
-            "DOCTOR_FABRIC_CMD": str(tmp_path / "doctor-fabric.sh"),
-            "DOCTOR_FABRIC_ONTOLOGY_CMD": str(tmp_path / "doctor-fabric-ontology.sh"),
             "CONFIGURE_FABRIC_ENTRA_CMD": str(tmp_path / "configure-fabric-entra.sh"),
             "RUN_FABRIC_PROVIDER_HOOK_CMD": str(tmp_path / "run-fabric-provider-hook.sh"),
             "RUN_DOCUMENT_ACCEPTANCE_CMD": str(tmp_path / "run-document-acceptance.sh"),
@@ -261,9 +257,6 @@ def standard_output_payload(*, fabric: bool = False) -> str:
         },
         "api_app_id": {"value": "/subscriptions/s/resourceGroups/r/providers/Microsoft.App/containerApps/api"},
         "cleanup_job_id": {"value": "/subscriptions/s/resourceGroups/r/providers/Microsoft.App/jobs/cleanup"},
-        "fabric_acceptance_job_id": {
-            "value": "/subscriptions/s/resourceGroups/r/providers/Microsoft.App/jobs/fabric" if fabric else None
-        },
         "fabric_vault_url": {"value": "https://vault.vault.azure.net/" if fabric else None},
         "sandbox_group_id": {
             "value": "/subscriptions/s/resourceGroups/r/providers/Microsoft.App/sandboxGroups/sbg-eda-tf-demo"
@@ -368,5 +361,5 @@ def test_bridge_requires_selected_fabric_bootstrap_and_finalize(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
     order = (tmp_path / "order.log").read_text(encoding="utf-8")
     assert "configure-fabric-entra.sh" in order
-    assert "doctor-fabric-ontology.sh" in order
+    assert "run-fabric-provider-hook.sh" in order
     assert order.rindex("configure-fabric-entra.sh") < order.index("azd deploy --all")

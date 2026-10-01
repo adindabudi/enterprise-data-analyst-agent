@@ -17,14 +17,6 @@ class ContextModel(BaseModel):
     )
 
 
-class FabricQueryContextRef(ContextModel):
-    query_ref: str = Field(pattern=r"^fabric-query-[A-Za-z0-9_-]+$")
-    source_alias: str = Field(pattern=r"^[a-z][a-z0-9-]{1,39}$")
-    purpose: str = Field(pattern=r"^(schema|aggregate|control_total)$")
-    result_shape: str = Field(pattern=r"^[a-z_]{1,64}$")
-    reconciliation_status: str = Field(pattern=r"^(not_required|pending|matched|mismatched)$")
-
-
 class QueryResultContextRef(ContextModel):
     """Rows the chat already fetched, addressed exactly as execute_in_sandbox expects them."""
 
@@ -43,7 +35,6 @@ class ContextSnapshot(ContextModel):
     decisions: tuple[dict[str, Any], ...] = ()
     open_questions: tuple[str, ...] = ()
     provenance_refs: tuple[str, ...] = ()
-    fabric_queries: tuple[FabricQueryContextRef, ...] = Field(default=(), max_length=20)
     query_results: tuple[QueryResultContextRef, ...] = Field(default=(), max_length=10)
     input_artifacts: tuple[ArtifactRef, ...] = Field(default=(), max_length=10)
     required_outputs: tuple[RequiredOutput, ...] | None = None

@@ -9,8 +9,8 @@
 | Cosmos          | Tenant/owner/session records    | API and worker data-plane roles  | Cross-owner point reads and unscoped queries | HPK cloud contract              |
 | Blob quarantine | Untrusted uploads               | API upload identity and Defender | Browser SAS, promotion before clean scan     | Azurite and Defender acceptance |
 | Worker          | Task and artifact state         | Worker managed identity          | Web-session token reuse                      | Runtime tests                   |
-| Foundry         | Prompts and tool calls          | Worker managed identity          | Browser direct model access                  | Harness gate                    |
-| Fabric          | Optional semantic-model access  | Fabric pack identity             | Core web token delegation                    | Plan 8B gate                    |
+| Foundry         | Prompts and tool calls          | Web managed identity             | Browser direct model access                  | Harness gate                    |
+| Fabric          | Optional ontology access        | Fabric pack identity             | Core web token delegation                    | Fabric auth tests               |
 | Sandbox         | Generated code and files        | Session pool identity            | Shared host or production network access     | Session-pool acceptance         |
 
 Opaque IDs are locators, not authorization. Every API and Cosmos operation derives the hierarchical partition key from the validated principal.

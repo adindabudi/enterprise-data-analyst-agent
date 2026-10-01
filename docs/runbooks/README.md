@@ -23,7 +23,6 @@ Start here when something breaks or when you are about to change the deployment.
 | ------------------------------------ | ---------------------------------------------------------------------------- |
 | Ship a release                       | [release-checklist.md](release-checklist.md)                                 |
 | Keep Bicep and Terraform aligned     | [terraform-parity.md](terraform-parity.md)                                   |
-| Enable Fabric semantic model         | [fabric-iq.md](fabric-iq.md)                                                 |
 | Enable Fabric ontology               | [fabric-ontology-lab.md](fabric-ontology-lab.md)                             |
 | Refresh the ontology schema snapshot | [fabric-ontology-lab.md](fabric-ontology-lab.md#publish-the-schema-snapshot) |
 | Enable Office document generation    | [document-pack.md](document-pack.md)                                         |
@@ -36,10 +35,10 @@ Things that surprise people. Most are configuration rather than defects, but the
 Startup checks the feature record against the deployed worker and sandbox image digests. Republish the contract for the new digests, or set `DOCUMENTS_ENABLED=false` until you can. See [document-pack.md](document-pack.md).
 
 **The analyst says no source is configured, but the UI shows Fabric connected.**
-The API can report a linked Fabric grant before the selected provider contract has passed readiness. Re-run the provider contract and acceptance gates; an environment variable alone cannot promote the provider.
+The API can report a linked Fabric grant while the ontology source has no query tools. It wires them only when the Fabric tenant is the product tenant, the catalog holds exactly one ontology, and the published schema snapshot loads for that source. An environment variable alone cannot change the pack state. See [fabric-ontology-lab.md](fabric-ontology-lab.md#readiness).
 
 **Fabric stays `configured` and never reaches `ready`.**
-Readiness requires two distinct tenants. If your Fabric tenant ID equals your product tenant ID, the acceptance gate rejects it by design. A same-tenant setup is a smoke test only.
+Expected. The schema snapshot path has no acceptance gate yet, so nothing promotes the ontology pack to `ready`.
 
 **Fabric is linked, but the analyst has no tool to query the ontology.**
 The source's schema snapshot is missing, invalid, or describes a different source, so the API registers no query tools and logs `Fabric source queries are unavailable`. Build and publish the snapshot, then restart the API revision. See [fabric-ontology-lab.md](fabric-ontology-lab.md#publish-the-schema-snapshot).

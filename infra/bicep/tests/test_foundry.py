@@ -32,7 +32,7 @@ def resources_of_type(resources: Iterable[Mapping[str, Any]], resource_type: str
     return tuple(resource for resource in resources if resource.get("type") == resource_type)
 
 
-def test_foundry_deploys_one_exact_terra_model_with_api_and_worker_access() -> None:
+def test_foundry_deploys_one_exact_terra_model_with_api_access() -> None:
     resources = compiled_resources()
     accounts = resources_of_type(resources, "Microsoft.CognitiveServices/accounts")
     projects = resources_of_type(resources, "Microsoft.CognitiveServices/accounts/projects")
@@ -79,10 +79,10 @@ def test_foundry_deploys_one_exact_terra_model_with_api_and_worker_access() -> N
     cognitive_services_user_assignments = [
         assignment for assignment in assignments if COGNITIVE_SERVICES_USER_ROLE_ID in str(assignment)
     ]
-    assert len(cognitive_services_user_assignments) == 2
+    assert len(cognitive_services_user_assignments) == 1
     serialized_assignments = "\n".join(str(assignment) for assignment in cognitive_services_user_assignments)
     assert "webIdentityPrincipalId" in serialized_assignments
-    assert "workerIdentityPrincipalId" in serialized_assignments
+    assert "workerIdentityPrincipalId" not in serialized_assignments
     assert all("account" in str(assignment) for assignment in cognitive_services_user_assignments)
 
 

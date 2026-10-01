@@ -6,7 +6,6 @@ param provisioningIdentityName string
 param signingCertificateName string
 param cacheWrapKeyName string
 param webIdentityPrincipalId string
-param workerIdentityPrincipalId string
 param acceptancePrincipalId string
 param forceUpdateTag string
 param privateEndpointsSubnetId string
@@ -19,7 +18,6 @@ var certificateReadRoleId = guid(subscription().id, resourceGroup().id, 'eda-fab
 var certificateProvisionRoleId = guid(subscription().id, resourceGroup().id, 'eda-fabric-certificate-provision')
 var signingRoleId = guid(subscription().id, resourceGroup().id, 'eda-fabric-sign')
 var cacheCryptoRoleId = guid(subscription().id, resourceGroup().id, 'eda-fabric-cache-crypto')
-var cacheWrapRoleId = guid(subscription().id, resourceGroup().id, 'eda-fabric-cache-wrap')
 var certificateReady = certificateProvisioningEnabled || signingCertificateReady
 
 resource certificateReadRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (enabled) {
@@ -104,28 +102,6 @@ resource cacheCryptoRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = 
         dataActions: [
           'Microsoft.KeyVault/vaults/keys/wrap/action'
           'Microsoft.KeyVault/vaults/keys/unwrap/action'
-        ]
-        notDataActions: []
-      }
-    ]
-    assignableScopes: [
-      resourceGroup().id
-    ]
-  }
-}
-
-resource cacheWrapRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (enabled) {
-  name: cacheWrapRoleId
-  properties: {
-    roleName: 'EDA Fabric cache wrap'
-    description: 'Wrap an acceptance input data-encryption key without decrypting it.'
-    type: 'CustomRole'
-    permissions: [
-      {
-        actions: []
-        notActions: []
-        dataActions: [
-          'Microsoft.KeyVault/vaults/keys/wrap/action'
         ]
         notDataActions: []
       }
@@ -300,16 +276,6 @@ resource webCertificateRead 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
-resource workerCertificateRead 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady) {
-  name: guid(vault.id, workerIdentityPrincipalId, certificateReadRole.id)
-  scope: vault
-  properties: {
-    principalId: workerIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: certificateReadRole.id
-  }
-}
-
 resource acceptanceCertificateRead 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady) {
   name: guid(vault.id, acceptancePrincipalId, certificateReadRole.id)
   scope: vault
@@ -332,19 +298,6 @@ resource webSigning 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (e
   ]
 }
 
-resource workerSigning 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady) {
-  name: guid(signingKey.id, workerIdentityPrincipalId, signingRole.id)
-  scope: signingKey
-  properties: {
-    principalId: workerIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: signingRole.id
-  }
-  dependsOn: [
-    certificateScript
-  ]
-}
-
 resource webCacheCrypto 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady) {
   name: guid(cacheWrapKey.id, webIdentityPrincipalId, cacheCryptoRole.id)
   scope: cacheWrapKey
@@ -352,25 +305,6 @@ resource webCacheCrypto 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
     principalId: webIdentityPrincipalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: cacheCryptoRole.id
-  }
-}
-
-resource workerCacheCrypto 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady) {
-  name: guid(cacheWrapKey.id, workerIdentityPrincipalId, cacheCryptoRole.id)
-  scope: cacheWrapKey
-  properties: {
-    principalId: workerIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: cacheCryptoRole.id
-  }
-}
-
-resource acceptanceCacheWrap 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enabled && certificateReady) {
-  name: guid(cacheWrapKey.id, acceptancePrincipalId, cacheWrapRole.id)
-  scope: cacheWrapKey
-  properties: {
-    principalId: acceptancePrincipalId
-    roleDefinitionId: cacheWrapRole.id
   }
 }
 

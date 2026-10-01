@@ -166,8 +166,8 @@ variable "fabric_provider" {
   default = ""
 
   validation {
-    condition     = contains(["", "semantic_model", "ontology"], var.fabric_provider)
-    error_message = "fabric_provider must be empty, semantic_model, or ontology."
+    condition     = contains(["", "ontology"], var.fabric_provider)
+    error_message = "fabric_provider must be empty or ontology."
   }
 }
 
@@ -179,11 +179,6 @@ variable "fabric_tenant_id" {
 variable "fabric_client_id" {
   type    = string
   default = ""
-}
-
-variable "fabric_semantic_models_json" {
-  type    = string
-  default = "{}"
 }
 
 variable "fabric_ontologies_json" {

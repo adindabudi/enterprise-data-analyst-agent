@@ -12,7 +12,6 @@ from eda_fabric_auth.crypto import CipherEnvelope
 from eda_fabric_auth.models import FabricGrantRecord, FabricGrantState, FabricProvider
 from eda_fabric_auth.msal_cache import (
     FABRIC_RESOURCE_AUDIENCE,
-    SEMANTIC_MODEL_APPLICATION_SCOPES,
     FabricAuthorizationRequired,
     FabricMsalAuthorizationCodeService,
     FabricMsalSilentTokenService,
@@ -24,6 +23,7 @@ from eda_fabric_auth.msal_cache import (
     provider_scope_hash,
 )
 from eda_fabric_auth.repository import FabricGrantConflict, InMemoryFabricGrantRepository
+from eda_fabric_auth.scopes import ONTOLOGY_BYO_SCOPES
 from msal import SerializableTokenCache
 
 
@@ -184,7 +184,6 @@ def test_authority_and_provider_scopes_match_contract() -> None:
     assert fabric_authority(UUID("33333333-3333-3333-3333-333333333333")) == (
         "https://login.microsoftonline.com/33333333-3333-3333-3333-333333333333"
     )
-    assert provider_application_scopes(FabricProvider.SEMANTIC_MODEL) == SEMANTIC_MODEL_APPLICATION_SCOPES
     assert provider_application_scopes(FabricProvider.ONTOLOGY) == (
         "https://analysis.windows.net/powerbi/api/Item.Read.All",
         "https://analysis.windows.net/powerbi/api/Item.Execute.All",
@@ -247,7 +246,7 @@ async def test_initiate_uses_exact_scopes_and_form_post_without_reserved_scopes(
     )
 
     await service.initiate_authorization_flow(
-        provider=FabricProvider.SEMANTIC_MODEL,
+        provider=FabricProvider.ONTOLOGY,
         redirect_uri="https://app.example/api/fabric/auth/callback",
     )
 
@@ -255,7 +254,7 @@ async def test_initiate_uses_exact_scopes_and_form_post_without_reserved_scopes(
     assert app_state.client_id == "44444444-4444-4444-4444-444444444444"
     assert app_state.app is not None
     assert app_state.app.initiated == {
-        "scopes": list(SEMANTIC_MODEL_APPLICATION_SCOPES),
+        "scopes": list(ONTOLOGY_BYO_SCOPES),
         "redirect_uri": "https://app.example/api/fabric/auth/callback",
         "response_mode": "form_post",
     }
@@ -285,13 +284,13 @@ async def test_complete_returns_pending_grant_only() -> None:
     pending = await service.complete_authorization_flow(
         tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
         owner_object_id=UUID("22222222-2222-2222-2222-222222222222"),
-        provider=FabricProvider.SEMANTIC_MODEL,
+        provider=FabricProvider.ONTOLOGY,
         flow={"state": "state-12345678", "nonce": "nonce-12345678"},
         auth_response={"state": "state-12345678", "code": "one-time-code"},
     )
 
-    assert pending.provider is FabricProvider.SEMANTIC_MODEL
-    assert pending.scope_hash == provider_scope_hash(FabricProvider.SEMANTIC_MODEL)
+    assert pending.provider is FabricProvider.ONTOLOGY
+    assert pending.scope_hash == provider_scope_hash(FabricProvider.ONTOLOGY)
     assert pending.audience_hash == audience_hash()
 
 
@@ -299,9 +298,7 @@ async def test_complete_returns_pending_grant_only() -> None:
 async def test_silent_success_unchanged_cache_persists_last_use_and_renewal() -> None:
     repository = InMemoryFabricGrantRepository()
     now = _MutableNow(datetime.now(UTC))
-    grant = await repository.create_grant(
-        _build_grant(provider=FabricProvider.SEMANTIC_MODEL, cache_bytes=b"cache-seed")
-    )
+    grant = await repository.create_grant(_build_grant(provider=FabricProvider.ONTOLOGY, cache_bytes=b"cache-seed"))
     assert grant.etag is not None
 
     app_state = _AppFactoryState()
@@ -336,14 +333,14 @@ async def test_silent_success_unchanged_cache_persists_last_use_and_renewal() ->
     token = await service.acquire_access_token(
         tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
         owner_object_id=UUID("22222222-2222-2222-2222-222222222222"),
-        provider=FabricProvider.SEMANTIC_MODEL,
+        provider=FabricProvider.ONTOLOGY,
     )
 
     assert token.token == _access_token()
     updated = await repository.get_grant(
         UUID("11111111-1111-1111-1111-111111111111"),
         UUID("22222222-2222-2222-2222-222222222222"),
-        FabricProvider.SEMANTIC_MODEL,
+        FabricProvider.ONTOLOGY,
     )
     assert updated is not None
     assert updated.last_used_at == now.value
@@ -418,7 +415,7 @@ class _ConflictOnceRepository:
 @pytest.mark.asyncio
 async def test_silent_retries_one_etag_conflict() -> None:
     inner = InMemoryFabricGrantRepository()
-    await inner.create_grant(_build_grant(provider=FabricProvider.SEMANTIC_MODEL, cache_bytes=b"cache-seed"))
+    await inner.create_grant(_build_grant(provider=FabricProvider.ONTOLOGY, cache_bytes=b"cache-seed"))
 
     service = FabricMsalSilentTokenService(
         repository=_ConflictOnceRepository(inner),  # type: ignore[arg-type]
@@ -442,7 +439,7 @@ async def test_silent_retries_one_etag_conflict() -> None:
     token = await service.acquire_access_token(
         tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
         owner_object_id=UUID("22222222-2222-2222-2222-222222222222"),
-        provider=FabricProvider.SEMANTIC_MODEL,
+        provider=FabricProvider.ONTOLOGY,
     )
     assert token.token == _access_token()
 
@@ -541,7 +538,7 @@ async def test_reauth_errors_mark_state_without_secret_leak(
     accounts: list[dict[str, Any]],
 ) -> None:
     repository = InMemoryFabricGrantRepository()
-    await repository.create_grant(_build_grant(provider=FabricProvider.SEMANTIC_MODEL, cache_bytes=b"cache-seed"))
+    await repository.create_grant(_build_grant(provider=FabricProvider.ONTOLOGY, cache_bytes=b"cache-seed"))
 
     service = FabricMsalSilentTokenService(
         repository=repository,
@@ -563,7 +560,7 @@ async def test_reauth_errors_mark_state_without_secret_leak(
         await service.acquire_access_token(
             tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
             owner_object_id=UUID("22222222-2222-2222-2222-222222222222"),
-            provider=FabricProvider.SEMANTIC_MODEL,
+            provider=FabricProvider.ONTOLOGY,
         )
 
     assert "access_token" not in str(error.value)
@@ -571,7 +568,7 @@ async def test_reauth_errors_mark_state_without_secret_leak(
     updated = await repository.get_grant(
         UUID("11111111-1111-1111-1111-111111111111"),
         UUID("22222222-2222-2222-2222-222222222222"),
-        FabricProvider.SEMANTIC_MODEL,
+        FabricProvider.ONTOLOGY,
     )
     assert updated is not None
     assert updated.state is FabricGrantState.REAUTH_REQUIRED

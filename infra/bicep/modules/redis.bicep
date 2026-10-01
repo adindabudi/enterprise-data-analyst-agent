@@ -5,7 +5,6 @@ param productDataPublicAccessEnabled bool
 param redisSku string
 param tags object
 param webIdentityPrincipalId string
-param workerIdentityPrincipalId string
 param privateEndpointsSubnetId string
 param privateDnsZoneId string
 
@@ -43,17 +42,6 @@ resource webAccessPolicyAssignment 'Microsoft.Cache/redisEnterprise/databases/ac
     accessPolicyName: 'default'
     user: {
       objectId: webIdentityPrincipalId
-    }
-  }
-}
-
-resource workerAccessPolicyAssignment 'Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments@2025-07-01' = {
-  parent: database
-  name: 'worker'
-  properties: {
-    accessPolicyName: 'default'
-    user: {
-      objectId: workerIdentityPrincipalId
     }
   }
 }

@@ -16,9 +16,8 @@ from uuid import UUID
 
 import pytest
 from eda_api.analysis.attempts import AttemptStatus, TaskAttempt
-from eda_api.chat.service import QueryRun
 from eda_api.storage.query_results import CosmosBlobQueryResultWriter
-from eda_api.task_service import TaskService
+from eda_api.task_service import QueryRun, TaskService
 from eda_runtime_state.messages import CanonicalMessage, InMemoryMessageRepository
 from eda_runtime_state.models import TaskPartition
 from eda_runtime_state.tasks import InMemoryRuntimeStateRepository

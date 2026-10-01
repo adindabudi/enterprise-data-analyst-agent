@@ -14,7 +14,6 @@ from agent_framework import (
     enqueue_messages,
 )
 from eda_contracts.controls import CommandKind
-from eda_worker.fabric.contracts import FabricPrincipal
 from eda_worker.history.models import CanonicalMessage, SessionPartition
 from eda_worker.model.profiles import ModelContract, WorkClass
 
@@ -87,7 +86,6 @@ class SessionHydratingAgent:
         projection_repository: ProjectionRepository,
         command_repository: BoundCommandRepository,
         model_contract: ModelContract,
-        product_audience: UUID,
     ) -> None:
         self._harness = harness
         self.id = cast(str, harness.id)
@@ -97,7 +95,6 @@ class SessionHydratingAgent:
         self._projection_repository = projection_repository
         self._command_repository = command_repository
         self._model_contract = model_contract
-        self._product_audience = product_audience
 
     def create_session(self, *, session_id: str | None = None) -> AgentSession:
         return cast(AgentSession, self._harness.create_session(session_id=session_id))
@@ -138,26 +135,26 @@ class SessionHydratingAgent:
         return self._run_once(current_request, options)
 
     async def _run_once(self, message: AgentRunInputs, options: dict[str, object]) -> Any:
-        restored, phase, model_options, principal = await self._prepare(options)
+        restored, phase, model_options = await self._prepare(options)
         task_id = cast(str, model_options.pop("task_id"))
         result = self._harness.run(
             message,
             session=restored,
             stream=False,
             options=model_options,
-            function_invocation_kwargs={"task_id": task_id, "phase": phase, "principal": principal},
+            function_invocation_kwargs={"task_id": task_id, "phase": phase},
         )
         return await result
 
     async def _open_stream(self, message: AgentRunInputs, options: dict[str, object]) -> ResponseStream[Any, Any]:
-        restored, phase, model_options, principal = await self._prepare(options)
+        restored, phase, model_options = await self._prepare(options)
         task_id = cast(str, model_options.pop("task_id"))
         result = self._harness.run(
             message,
             session=restored,
             stream=True,
             options=model_options,
-            function_invocation_kwargs={"task_id": task_id, "phase": phase, "principal": principal},
+            function_invocation_kwargs={"task_id": task_id, "phase": phase},
         )
         if not isinstance(result, ResponseStream):
             raise TypeError("streaming harness run must return ResponseStream")
@@ -174,7 +171,7 @@ class SessionHydratingAgent:
             raise ValueError("session hydrator requires a current request")
         return [replayed_messages[-1]]
 
-    async def _prepare(self, options: dict[str, object]) -> tuple[AgentSession, str, dict[str, Any], FabricPrincipal]:
+    async def _prepare(self, options: dict[str, object]) -> tuple[AgentSession, str, dict[str, Any]]:
         unknown_keys = set(options) - TRUSTED_OPTION_KEYS
         if unknown_keys:
             raise ValueError(f"caller-supplied model options are forbidden: {sorted(unknown_keys)}")
@@ -199,11 +196,6 @@ class SessionHydratingAgent:
         task = await self._runtime_repository.resolve_task(task_id)
         if task is None:
             raise ValueError("task is unavailable for session hydration")
-        principal = FabricPrincipal(
-            tenant_id=task.tenant_id,
-            owner_object_id=task.owner_object_id,
-            audience=self._product_audience,
-        )
         partition = SessionPartition(
             tenant_id=task.tenant_id,
             owner_object_id=task.owner_object_id,
@@ -231,7 +223,7 @@ class SessionHydratingAgent:
         response_format = options.get("response_format")
         if response_format is not None:
             model_options["response_format"] = response_format
-        return restored, phase, model_options, principal
+        return restored, phase, model_options
 
     async def _enqueue_source_message(
         self,

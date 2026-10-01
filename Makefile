@@ -1,4 +1,4 @@
-.PHONY: bootstrap check contracts format lint test typecheck integration e2e visual-check security acceptance-core acceptance-fabric acceptance-fabric-ontology fabric-ontology-smoke acceptance-documents parity iac-parity supply-chain-gate eval-gate release-gate test-storage test-storage-cloud acceptance-storage deployed-storage-gate deployed-core-gate test-harness model-contract sandbox-image sandbox-contract core-artifact-acceptance sandbox-benchmark document-vertical-slice document-benchmark
+.PHONY: bootstrap check contracts format lint test typecheck integration e2e visual-check security acceptance-core acceptance-documents parity iac-parity supply-chain-gate eval-gate release-gate test-storage test-storage-cloud acceptance-storage deployed-storage-gate deployed-core-gate test-harness model-contract sandbox-image sandbox-contract core-artifact-acceptance sandbox-benchmark document-vertical-slice document-benchmark
 
 bootstrap:
 	uv sync --all-packages --frozen
@@ -105,15 +105,6 @@ security:
 acceptance-core:
 	@test -n "$$EDA_SANDBOX_IMAGE" || (echo "FAIL: EDA_SANDBOX_IMAGE is required" >&2; exit 1)
 	EDA_SANDBOX_IMAGE="$$EDA_SANDBOX_IMAGE" uv run pytest tests/acceptance/test_core_vertical_slice.py -q
-
-acceptance-fabric:
-	@./scripts/run-fabric-acceptance.sh
-
-acceptance-fabric-ontology:
-	@./scripts/run-fabric-ontology-acceptance.sh
-
-fabric-ontology-smoke:
-	@./scripts/run-fabric-ontology-smoke.sh
 
 acceptance-documents:
 	@./scripts/run-document-acceptance.sh

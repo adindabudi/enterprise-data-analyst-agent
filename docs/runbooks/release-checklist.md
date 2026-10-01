@@ -8,7 +8,7 @@ A release is accepted only by fresh executable evidence. Source presence, local 
 - [ ] Region is `southeastasia`; subscription, tenant, resource group, and acceptance principal are explicit.
 - [ ] No analyst-model router, fallback deployment, alternate profile, or substitute estimator exists.
 - [ ] Monitoring alerts remain disabled for the accepted demo profile.
-- [ ] Optional Fabric provider intent is immutable and selects at most one of `semantic_model` or `ontology`.
+- [ ] Optional Fabric provider intent is immutable and selects only `ontology`.
 - [ ] Document terms acceptance matches the exact committed lock when enabled.
 
 ## Architecture
@@ -16,7 +16,7 @@ A release is accepted only by fresh executable evidence. Source presence, local 
 - [ ] Every deployed Azure service maps to an approved design requirement.
 - [ ] Bicep and Terraform represent the same Core and selected optional-pack resource inventory.
 - [ ] Terraform uses explicit apply plus azd service deployment and never invokes azd provisioning.
-- [ ] API is the only public application ingress; acceptance jobs expose no ingress.
+- [ ] API is the only public application ingress; Container Apps jobs expose no ingress.
 - [ ] Generated code runs only in credential-free, default-deny task-scoped ACA Sandboxes.
 - [ ] No ACA long-job worker or Dynamic Sessions pool is deployed.
 - [ ] No sandbox main-stage identity, application credential, arbitrary network target, or controller shell is available.
@@ -39,9 +39,8 @@ A release is accepted only by fresh executable evidence. Source presence, local 
 ## Optional packs
 
 - [ ] Disabled packs are absent from model tools, API capability responses, and UI actions.
-- [ ] Fabric-ready exposes exactly five application capabilities and no provider MCP tool.
-- [ ] Fabric readiness is real two-tenant evidence; same-tenant smoke cannot promote it.
-- [ ] Ontology and semantic-model contracts, grants, catalogs, evidence, and readiness are never interchangeable.
+- [ ] Fabric exposes only `query_graph` and, with a KQL database, `query_timeseries`; no provider MCP tool reaches the model.
+- [ ] The Fabric ontology pack stays `configured`; nothing promotes it to `ready` until the schema snapshot path has an acceptance gate.
 - [ ] Fabric authorization/denial/timeout/malformed-output cases produce no model-knowledge substitute.
 - [ ] Document readiness binds deployment, worker and sandbox image digests, lock, commit, bundles, benchmark, and cloud observations.
 - [ ] A failed optional-pack gate leaves that pack hidden and does not falsify Core health.
@@ -63,7 +62,7 @@ A release is accepted only by fresh executable evidence. Source presence, local 
 - [ ] Automatic runs alone determine routing, completion, judge, quality, provenance, and latency thresholds.
 - [ ] Forced compatibility probes cannot enter or improve automatic denominators.
 - [ ] Deterministic invariants, numeric tolerances, Fabric routing/no-substitute controls, and ontology traces pass every required run.
-- [ ] Prompt, tool description/source guide, model options, provider contract, or compaction changes have fresh regression evidence.
+- [ ] Prompt, tool description/source guide, model options, schema snapshot, or compaction changes have fresh regression evidence.
 - [ ] Reports contain hashes, metric IDs, statuses, durations, counts, and run IDs only.
 
 ## Deployment and teardown

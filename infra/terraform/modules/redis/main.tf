@@ -30,10 +30,6 @@ variable "web_identity_principal_id" {
   type = string
 }
 
-variable "worker_identity_principal_id" {
-  type = string
-}
-
 variable "private_endpoints_subnet_id" {
   type = string
 }
@@ -95,22 +91,6 @@ resource "azapi_resource" "web_access_policy_assignment" {
       accessPolicyName = "default"
       user = {
         objectId = var.web_identity_principal_id
-      }
-    }
-  }
-}
-
-resource "azapi_resource" "worker_access_policy_assignment" {
-  type                      = "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments@2025-07-01"
-  name                      = "worker"
-  parent_id                 = azapi_resource.database.id
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      accessPolicyName = "default"
-      user = {
-        objectId = var.worker_identity_principal_id
       }
     }
   }

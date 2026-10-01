@@ -14,12 +14,10 @@ def test_container_apps_keep_one_api_and_gated_jobs() -> None:
     assert "Microsoft.App/containerApps@2026-01-01" in source
     assert "targetPort" in source and "8000" in source
     assert 'resource "azapi_resource" "worker"' not in source
-    assert 'acceptance_name       = "fabric-acc-${var.environment_name}-${var.suffix}"' in source
     assert "count                     = var.deploy_image_dependent_resources ? 1 : 0" in source
     assert 'cronExpression         = "0 2 * * *"' in source
     assert '["eda-worker", "cleanup", "--before", "now", "--limit", "100"]' in source
-    assert "count                     = var.deploy_image_dependent_resources && var.fabric_enabled ? 1 : 0" in source
-    assert '["eda-worker", "accept-fabric", "--provider", var.fabric_provider]' in source
+    assert source.count('"Microsoft.App/jobs@2026-01-01"') == 1
 
 
 def test_sandbox_group_scales_to_zero_and_uses_a_dedicated_subnet() -> None:

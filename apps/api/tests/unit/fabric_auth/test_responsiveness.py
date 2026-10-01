@@ -45,7 +45,7 @@ async def test_fabric_api_adapter_passes_capacity_limiter_to_run_sync() -> None:
     adapter._run_sync = recording_run_sync  # type: ignore[attr-defined]
     adapter._service = _FakeService(adapter._offload)  # type: ignore[attr-defined]
 
-    await adapter.initiate(provider=FabricProvider.SEMANTIC_MODEL, redirect_uri="https://app.example/callback")
+    await adapter.initiate(provider=FabricProvider.ONTOLOGY, redirect_uri="https://app.example/callback")
 
     assert captured == [adapter._limiter]  # type: ignore[attr-defined]
 
@@ -68,7 +68,7 @@ async def test_fabric_api_adapter_keeps_event_loop_responsive() -> None:
 
     await asyncio.gather(
         ticker(),
-        adapter.initiate(provider=FabricProvider.SEMANTIC_MODEL, redirect_uri="https://app.example/callback"),
+        adapter.initiate(provider=FabricProvider.ONTOLOGY, redirect_uri="https://app.example/callback"),
     )
 
     assert ticks > 2

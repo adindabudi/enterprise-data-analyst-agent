@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUTPUT_ALLOWLIST_REGEX='^(resource_group_name|deployment_id|api_url|profile|model_profile|model_deployment_name|project_endpoint|container_registry_id|container_registry_login_server|cosmos_account_id|cosmos_endpoint|storage_account_id|storage_blob_endpoint|redis_cluster_id|redis_hostname|redis_port|web_identity_id|web_identity_client_id|web_identity_principal_id|worker_identity_id|worker_identity_client_id|worker_identity_principal_id|session_init_identity_id|session_init_identity_client_id|session_init_identity_principal_id|virtual_network_id|aca_subnet_id|sandbox_subnet_id|foundry_agent_subnet_id|private_endpoints_subnet_id|log_analytics_workspace_id|app_insights_id|container_apps_environment_id|api_app_id|cleanup_job_id|fabric_acceptance_job_id|fabric_vault_url|sandbox_group_id|budget_action_group_id)$'
+OUTPUT_ALLOWLIST_REGEX='^(resource_group_name|deployment_id|api_url|profile|model_profile|model_deployment_name|project_endpoint|container_registry_id|container_registry_login_server|cosmos_account_id|cosmos_endpoint|storage_account_id|storage_blob_endpoint|redis_cluster_id|redis_hostname|redis_port|web_identity_id|web_identity_client_id|web_identity_principal_id|worker_identity_id|worker_identity_client_id|worker_identity_principal_id|session_init_identity_id|session_init_identity_client_id|session_init_identity_principal_id|virtual_network_id|aca_subnet_id|sandbox_subnet_id|foundry_agent_subnet_id|private_endpoints_subnet_id|log_analytics_workspace_id|app_insights_id|container_apps_environment_id|api_app_id|cleanup_job_id|fabric_vault_url|sandbox_group_id|budget_action_group_id)$'
 SECRET_NAME_REGEX='(connection|string|key|password|secret|token|shared_key)'
 
 fail() {
@@ -70,7 +70,6 @@ write_runtime_variables() {
         --arg fabricProvider "$FABRIC_PROVIDER" \
         --arg fabricTenantId "${FABRIC_TENANT_ID:-}" \
         --arg fabricClientId "$fabric_client_id" \
-        --arg fabricSemanticModelsJson "${FABRIC_SEMANTIC_MODELS_JSON:-{}}" \
         --arg fabricOntologiesJson "${FABRIC_ONTOLOGIES_JSON:-{}}" \
         --arg acceptancePrincipalId "$acceptance_principal_id" \
         --argjson fabricEnabled "$FABRIC_ENABLED" \
@@ -88,7 +87,6 @@ write_runtime_variables() {
             fabric_provider: $fabricProvider,
             fabric_tenant_id: $fabricTenantId,
             fabric_client_id: $fabricClientId,
-            fabric_semantic_models_json: $fabricSemanticModelsJson,
             fabric_ontologies_json: $fabricOntologiesJson,
             acceptance_principal_id: $acceptancePrincipalId,
             documents_enabled: $documentsEnabled,
@@ -179,9 +177,6 @@ map_terraform_outputs_to_azd() {
     azd env set CONTAINER_APPS_ENVIRONMENT_ID "$(jq -r '.container_apps_environment_id.value' "$output_json")" >/dev/null
     azd env set API_APP_ID "$(jq -r '.api_app_id.value' "$output_json")" >/dev/null
     azd env set CLEANUP_JOB_ID "$(jq -r '.cleanup_job_id.value' "$output_json")" >/dev/null
-    if [[ "$(jq -r '.fabric_acceptance_job_id.value // empty' "$output_json")" != "" && "$(jq -r '.fabric_acceptance_job_id.value // empty' "$output_json")" != "null" ]]; then
-        azd env set FABRIC_ACCEPTANCE_JOB_ID "$(jq -r '.fabric_acceptance_job_id.value' "$output_json")" >/dev/null
-    fi
     if [[ "$(jq -r '.fabric_vault_url.value // empty' "$output_json")" != "" && "$(jq -r '.fabric_vault_url.value // empty' "$output_json")" != "null" ]]; then
         azd env set FABRIC_KEY_VAULT_URL "$(jq -r '.fabric_vault_url.value' "$output_json")" >/dev/null
     fi
@@ -226,7 +221,7 @@ chmod 700 "$(dirname "$TF_STATE_PATH")" "$TF_DATA_DIR"
 [[ "$DOCUMENTS_ENABLED" == "true" || "$DOCUMENTS_ENABLED" == "false" ]] || fail "DOCUMENTS_ENABLED must be true or false"
 [[ "$POWERBI_PROJECT_ENABLED" == "true" || "$POWERBI_PROJECT_ENABLED" == "false" ]] || fail "POWERBI_PROJECT_ENABLED must be true or false"
 if [[ "$FABRIC_ENABLED" == "true" ]]; then
-    [[ "$FABRIC_PROVIDER" == "semantic_model" || "$FABRIC_PROVIDER" == "ontology" ]] || fail "Terraform mode requires a known FABRIC_PROVIDER when Fabric is enabled"
+    [[ "$FABRIC_PROVIDER" == "ontology" ]] || fail "Terraform mode requires FABRIC_PROVIDER=ontology when Fabric is enabled"
 fi
 
 run_step azd env new "$TF_AZD_ENV_NAME" >/dev/null 2>&1 || true
@@ -238,11 +233,7 @@ if [[ "$FABRIC_ENABLED" == "true" ]]; then
 fi
 run_step ${PREFLIGHT_MODEL_CMD:-"$ROOT/scripts/preflight-model.sh"}
 if [[ "$FABRIC_ENABLED" == "true" ]]; then
-    if [[ "$FABRIC_PROVIDER" == "semantic_model" ]]; then
-        run_step ${DOCTOR_FABRIC_CMD:-"$ROOT/scripts/doctor-fabric.sh"} --phase predeploy
-    else
-        run_step ${DOCTOR_FABRIC_ONTOLOGY_CMD:-"$ROOT/scripts/doctor-fabric-ontology.sh"}
-    fi
+    run_step ${RUN_FABRIC_PROVIDER_HOOK_CMD:-"$ROOT/scripts/run-fabric-provider-hook.sh"} preprovision
 fi
 
 runtime_var_file="${TF_RUNTIME_VAR_FILE:-}"

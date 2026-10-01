@@ -82,71 +82,14 @@ def test_provider_bound_grant_uses_a_server_derived_identifier() -> None:
     assert record.provider is FabricProvider.ONTOLOGY
 
 
-@pytest.mark.parametrize("provider", list(FabricProvider))
-def test_provider_grant_rejects_an_identifier_for_another_provider(provider: FabricProvider) -> None:
+def test_provider_grant_rejects_an_identifier_for_another_provider() -> None:
     with pytest.raises(ValidationError, match="grant ID"):
         FabricGrantRecord.model_validate(
             {
-                **grant(provider).model_dump(mode="python"),
-                "id": "fabric-grant:semantic_model" if provider is FabricProvider.ONTOLOGY else "fabric-grant:ontology",
+                **grant(FabricProvider.ONTOLOGY).model_dump(mode="python"),
+                "id": "fabric-grant:other",
             }
         )
-
-
-@pytest.mark.asyncio
-async def test_grants_are_isolated_by_selected_provider() -> None:
-    repository = InMemoryFabricGrantRepository()
-    ontology_grant = grant(FabricProvider.ONTOLOGY)
-    created = await repository.create_grant(ontology_grant)
-
-    assert (
-        await repository.get_grant(
-            ontology_grant.tenant_id,
-            ontology_grant.owner_object_id,
-            FabricProvider.ONTOLOGY,
-        )
-        == created
-    )
-    assert (
-        await repository.get_grant(
-            ontology_grant.tenant_id,
-            ontology_grant.owner_object_id,
-            FabricProvider.SEMANTIC_MODEL,
-        )
-        is None
-    )
-
-
-@pytest.mark.asyncio
-async def test_unlink_removes_only_the_active_provider_grant() -> None:
-    repository = InMemoryFabricGrantRepository()
-    ontology_grant = grant(FabricProvider.ONTOLOGY)
-    semantic_grant = grant(FabricProvider.SEMANTIC_MODEL)
-    await repository.create_grant(ontology_grant)
-    semantic_created = await repository.create_grant(semantic_grant)
-
-    await repository.delete_grant(
-        ontology_grant.tenant_id,
-        ontology_grant.owner_object_id,
-        FabricProvider.ONTOLOGY,
-    )
-
-    assert (
-        await repository.get_grant(
-            ontology_grant.tenant_id,
-            ontology_grant.owner_object_id,
-            FabricProvider.ONTOLOGY,
-        )
-        is None
-    )
-    assert (
-        await repository.get_grant(
-            semantic_grant.tenant_id,
-            semantic_grant.owner_object_id,
-            FabricProvider.SEMANTIC_MODEL,
-        )
-        == semantic_created
-    )
 
 
 def test_flow_and_pending_records_reject_provider_crossover_identifiers() -> None:
@@ -154,7 +97,7 @@ def test_flow_and_pending_records_reject_provider_crossover_identifiers() -> Non
         FabricAuthorizationFlowRecord.model_validate(
             {
                 **flow(FabricProvider.ONTOLOGY).model_dump(mode="python"),
-                "id": "fabric-flow:semantic_model:callback_state_123",
+                "id": "fabric-flow:other:callback_state_123",
             }
         )
 
@@ -162,7 +105,7 @@ def test_flow_and_pending_records_reject_provider_crossover_identifiers() -> Non
         FabricPendingGrantRecord.model_validate(
             {
                 **pending(FabricProvider.ONTOLOGY).model_dump(mode="python"),
-                "id": "fabric-pending:semantic_model",
+                "id": "fabric-pending:other",
             }
         )
 
@@ -180,26 +123,7 @@ async def test_flow_is_consumed_once_by_its_server_issued_identifier() -> None:
 
 
 @pytest.mark.asyncio
-async def test_flow_identifier_cannot_overwrite_another_provider_binding() -> None:
-    repository = InMemoryFabricGrantRepository()
-    ontology_flow = flow(FabricProvider.ONTOLOGY)
-    semantic_flow = flow(FabricProvider.SEMANTIC_MODEL).model_copy(
-        update={
-            "flow_id": "callback_state_456",
-            "id": FabricAuthorizationFlowRecord.make_id(FabricProvider.SEMANTIC_MODEL, "callback_state_456"),
-        }
-    )
-
-    await repository.put_flow(ontology_flow)
-    await repository.put_flow(semantic_flow)
-
-    assert await repository.pop_flow(FabricProvider.SEMANTIC_MODEL, ontology_flow.flow_id) is None
-    assert await repository.pop_flow(FabricProvider.ONTOLOGY, ontology_flow.flow_id) is not None
-    assert await repository.pop_flow(FabricProvider.SEMANTIC_MODEL, semantic_flow.flow_id) is not None
-
-
-@pytest.mark.asyncio
-async def test_pending_promotion_requires_the_original_provider_and_bindings() -> None:
+async def test_pending_promotion_with_matching_bindings_creates_the_grant() -> None:
     repository = InMemoryFabricGrantRepository()
     pending_grant = pending(FabricProvider.ONTOLOGY)
     await repository.put_pending(pending_grant)
@@ -215,18 +139,6 @@ async def test_pending_promotion_requires_the_original_provider_and_bindings() -
             pending_grant.cache,
         )
         is not None
-    )
-    assert (
-        await repository.promote_pending(
-            pending_grant.tenant_id,
-            pending_grant.owner_object_id,
-            FabricProvider.SEMANTIC_MODEL,
-            pending_grant.receipt,
-            pending_grant.scope_hash,
-            pending_grant.audience_hash,
-            pending_grant.cache,
-        )
-        is None
     )
 
 

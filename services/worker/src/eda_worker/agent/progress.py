@@ -24,10 +24,8 @@ _MILESTONES = {
     "inspect_artifact": "Inspecting data",
     "validate_artifact": "Validating output",
     "publish_artifact": "Publishing output",
-    "query_fabric": "Querying the source",
     "query_graph": "Querying the source",
     "query_timeseries": "Querying the source",
-    "describe_source": "Reading the source structure",
 }
 
 

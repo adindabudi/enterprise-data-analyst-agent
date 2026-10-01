@@ -20,7 +20,6 @@ from eda_worker.model.profiles import (
 
 TASK_ID = "task_12345678"
 SESSION_ID = "ses_12345678"
-PRODUCT_AUDIENCE = UUID("33333333-3333-3333-3333-333333333333")
 
 
 @dataclass(frozen=True)
@@ -200,7 +199,6 @@ def adapter(harness: RecordingHarness) -> SessionHydratingAgent:
         projection_repository=ProjectionRepository(),
         command_repository=CommandRepository(),
         model_contract=model_contract(),
-        product_audience=PRODUCT_AUDIENCE,
     )
 
 
@@ -213,7 +211,6 @@ async def test_adapter_seeds_cold_session_from_canonical_source_message() -> Non
         projection_repository=FirstRunProjectionRepository(),
         command_repository=CommandRepository(),
         model_contract=model_contract(),
-        product_audience=PRODUCT_AUDIENCE,
     )
 
     await hydrating_agent.run(
@@ -253,7 +250,6 @@ async def test_adapter_seeds_cold_session_with_the_conversation_the_request_refe
         projection_repository=FirstRunProjectionRepository(),
         command_repository=CommandRepository(),
         model_contract=model_contract(),
-        product_audience=PRODUCT_AUDIENCE,
     )
 
     await hydrating_agent.run(
@@ -348,9 +344,7 @@ async def test_adapter_applies_exact_terra_contract_options() -> None:
     trusted = invocation["function_invocation_kwargs"]
     assert trusted["task_id"] == TASK_ID
     assert trusted["phase"] == "analyzing"
-    assert trusted["principal"].tenant_id == UUID("11111111-1111-1111-1111-111111111111")
-    assert trusted["principal"].owner_object_id == UUID("22222222-2222-2222-2222-222222222222")
-    assert trusted["principal"].audience == PRODUCT_AUDIENCE
+    assert trusted == {"task_id": TASK_ID, "phase": "analyzing"}
 
 
 @pytest.mark.asyncio

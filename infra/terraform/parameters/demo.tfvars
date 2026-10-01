@@ -23,7 +23,6 @@ fabric_enabled                     = false
 fabric_provider                    = ""
 fabric_tenant_id                   = ""
 fabric_client_id                   = ""
-fabric_semantic_models_json        = "{}"
 fabric_ontologies_json             = "{}"
 acceptance_principal_id            = ""
 documents_enabled                  = false

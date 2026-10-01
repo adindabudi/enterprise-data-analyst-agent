@@ -23,10 +23,6 @@ from .models import (
 from .repository import FabricGrantConflict, FabricGrantRepository
 from .scopes import ONTOLOGY_BYO_SCOPES
 
-SEMANTIC_MODEL_APPLICATION_SCOPES = (
-    "https://analysis.windows.net/powerbi/api/Item.Read.All",
-    "https://analysis.windows.net/powerbi/api/Item.Execute.All",
-)
 FABRIC_RESOURCE_AUDIENCE = "https://analysis.windows.net/powerbi/api"
 
 
@@ -90,8 +86,7 @@ def fabric_authority(fabric_tenant_id: UUID) -> str:
 
 
 def provider_application_scopes(provider: FabricProvider) -> tuple[str, ...]:
-    if provider is FabricProvider.SEMANTIC_MODEL:
-        return SEMANTIC_MODEL_APPLICATION_SCOPES
+    del provider
     return ONTOLOGY_BYO_SCOPES
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
@@ -21,13 +22,23 @@ from pydantic.alias_generators import to_camel
 from eda_api.analysis.admission import AdmissionRejected
 from eda_api.analysis.attempts import AttemptStatus, TaskExecutor
 from eda_api.auth.models import Principal
-from eda_api.chat.service import QueryRun
 from eda_api.storage.inputs import InputArtifactWriter
 from eda_api.storage.query_results import QueryResultWriter
 from eda_api.storage.uploads import UploadRejected, UploadService
 
 MAX_RECORDED_QUERY_CHARS = 8_000
 INITIAL_DISPATCH_TIMEOUT = timedelta(minutes=10)
+
+
+@dataclass(frozen=True)
+class QueryRun:
+    """One source query and the rows it returned, handed to a task as input."""
+
+    query: str
+    rows: str
+    source_alias: str | None = None
+    # The user message that asked for the query.
+    message_id: str | None = None
 
 
 def _row_count(rows: str) -> int:

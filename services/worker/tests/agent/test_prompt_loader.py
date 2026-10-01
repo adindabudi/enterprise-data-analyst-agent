@@ -16,13 +16,13 @@ from eda_worker.model.profiles import ModelProfileId
             ModelProfileId.CLAUDE_OPUS_4_8_XHIGH_V1,
             "claude-opus-4-8-v1.md",
             "claude-opus-4-8-v1",
-            "9e4408e257c61ba7f299ca0512545915f37703f9fb40aeb3416a57b9c372ecb4",
+            "67406b48514af4a32a623a2c38e142e9b10f72dfe50197463a4f338a149678ce",
         ),
         (
             ModelProfileId.GPT_5_6_TERRA_MEDIUM_V1,
             "gpt-5.6-terra-v1.md",
             "gpt-5.6-terra-v1",
-            "c70463cba2aec050c0b05c95a9ed0fdbe9872c9f8ab228ad4d1550b23d205409",
+            "bd6558f27ea6555a5b03fd610905482322995c2469780791601a980f10e35342",
         ),
     ],
 )

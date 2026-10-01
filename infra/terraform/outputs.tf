@@ -138,10 +138,6 @@ output "cleanup_job_id" {
   value = module.container_apps.cleanup_job_id
 }
 
-output "fabric_acceptance_job_id" {
-  value = var.fabric_enabled ? module.container_apps.fabric_acceptance_job_id : null
-}
-
 output "fabric_vault_url" {
   value = var.fabric_enabled ? module.fabric_auth[0].vault_uri : null
 }

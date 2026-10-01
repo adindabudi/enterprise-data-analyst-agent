@@ -42,10 +42,6 @@ variable "web_identity_principal_id" {
   type = string
 }
 
-variable "worker_identity_principal_id" {
-  type = string
-}
-
 variable "acceptance_principal_id" {
   type = string
 }
@@ -61,7 +57,6 @@ locals {
   certificate_provision_role_id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/22222222-2222-2222-2222-222222222222"
   signing_role_id               = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/33333333-3333-3333-3333-333333333333"
   cache_crypto_role_id          = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/44444444-4444-4444-4444-444444444444"
-  cache_wrap_role_id            = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/55555555-5555-5555-5555-555555555555"
 }
 
 resource "azapi_resource" "certificate_read_role" {
@@ -131,24 +126,6 @@ resource "azapi_resource" "cache_crypto_role" {
       description      = "Wrap and unwrap Fabric OAuth cache data-encryption keys only."
       type             = "CustomRole"
       permissions      = [{ actions = [], notActions = [], dataActions = ["Microsoft.KeyVault/vaults/keys/wrap/action", "Microsoft.KeyVault/vaults/keys/unwrap/action"], notDataActions = [] }]
-      assignableScopes = [local.resource_group_id]
-    }
-  }
-}
-
-resource "azapi_resource" "cache_wrap_role" {
-  count                     = var.enabled ? 1 : 0
-  type                      = "Microsoft.Authorization/roleDefinitions@2022-04-01"
-  name                      = "55555555-5555-5555-5555-555555555555"
-  parent_id                 = local.subscription_scope
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      roleName         = "EDA Fabric cache wrap"
-      description      = "Wrap an acceptance input data-encryption key without decrypting it."
-      type             = "CustomRole"
-      permissions      = [{ actions = [], notActions = [], dataActions = ["Microsoft.KeyVault/vaults/keys/wrap/action"], notDataActions = [] }]
       assignableScopes = [local.resource_group_id]
     }
   }
@@ -271,14 +248,6 @@ resource "azurerm_role_assignment" "web_certificate_read" {
   scope              = azapi_resource.vault[0].id
 }
 
-resource "azurerm_role_assignment" "worker_certificate_read" {
-  count              = var.enabled ? 1 : 0
-  principal_id       = var.worker_identity_principal_id
-  principal_type     = "ServicePrincipal"
-  role_definition_id = local.certificate_read_role_id
-  scope              = azapi_resource.vault[0].id
-}
-
 resource "azurerm_role_assignment" "acceptance_certificate_read" {
   count              = var.enabled && var.acceptance_principal_id != "" ? 1 : 0
   principal_id       = var.acceptance_principal_id
@@ -294,34 +263,11 @@ resource "azurerm_role_assignment" "web_signing" {
   scope              = "${azapi_resource.vault[0].id}/keys/${var.signing_certificate_name}"
 }
 
-resource "azurerm_role_assignment" "worker_signing" {
-  count              = var.enabled ? 1 : 0
-  principal_id       = var.worker_identity_principal_id
-  principal_type     = "ServicePrincipal"
-  role_definition_id = local.signing_role_id
-  scope              = "${azapi_resource.vault[0].id}/keys/${var.signing_certificate_name}"
-}
-
 resource "azurerm_role_assignment" "web_cache_crypto" {
   count              = var.enabled ? 1 : 0
   principal_id       = var.web_identity_principal_id
   principal_type     = "ServicePrincipal"
   role_definition_id = local.cache_crypto_role_id
-  scope              = azapi_resource.cache_wrap_key[0].id
-}
-
-resource "azurerm_role_assignment" "worker_cache_crypto" {
-  count              = var.enabled ? 1 : 0
-  principal_id       = var.worker_identity_principal_id
-  principal_type     = "ServicePrincipal"
-  role_definition_id = local.cache_crypto_role_id
-  scope              = azapi_resource.cache_wrap_key[0].id
-}
-
-resource "azurerm_role_assignment" "acceptance_cache_wrap" {
-  count              = var.enabled && var.acceptance_principal_id != "" ? 1 : 0
-  principal_id       = var.acceptance_principal_id
-  role_definition_id = local.cache_wrap_role_id
   scope              = azapi_resource.cache_wrap_key[0].id
 }
 

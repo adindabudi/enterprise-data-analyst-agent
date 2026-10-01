@@ -7,8 +7,6 @@ from typing import Any
 import eda_worker.agent.factory as factory
 import pytest
 from eda_worker.agent.prompt_loader import LoadedPrompt, load_prompt
-from eda_worker.context.fabric_readiness import FabricPendingValidationContextProvider
-from eda_worker.fabric.readiness import FabricReadiness, FabricReadinessStatus
 from eda_worker.model import client as model_client
 from eda_worker.model.profiles import ModelProfileId
 
@@ -222,27 +220,6 @@ def test_harness_has_only_approved_features(monkeypatch: pytest.MonkeyPatch) -> 
     assert options["default_options"] == {"store": False, "max_tokens": 64_000}
 
 
-def test_configured_fabric_adds_pending_validation_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[dict[str, Any]] = []
-    monkeypatch.setattr(factory, "create_harness_agent", lambda **kwargs: captured.append(kwargs) or SimpleNamespace())
-    monkeypatch.setattr(factory, "hard_ceiling_compactor", lambda value: object())
-
-    factory.create_primary_harness(
-        "client",
-        "history",
-        "task-state",
-        _tools(),
-        object(),
-        _prompt(),
-        fabric_readiness=FabricReadiness(status=FabricReadinessStatus.CONFIGURED),
-    )
-
-    providers = captured[0]["context_providers"]
-    assert providers[0] == "task-state"
-    assert isinstance(providers[1], FabricPendingValidationContextProvider)
-    assert len(providers) == 2
-
-
 def test_web_search_enabled_only_for_openai_family_model(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[dict[str, Any]] = []
     monkeypatch.setattr(factory, "create_harness_agent", lambda **kwargs: captured.append(kwargs) or SimpleNamespace())
@@ -308,61 +285,6 @@ def test_factory_uses_prevalidated_combined_skills_provider(monkeypatch: pytest.
     )
 
     assert captured[0]["skills_provider"] == "skills"
-
-
-@pytest.mark.parametrize("status", [FabricReadinessStatus.DISABLED, FabricReadinessStatus.CONFIGURED])
-def test_factory_withholds_query_fabric_until_ready(
-    monkeypatch: pytest.MonkeyPatch,
-    status: FabricReadinessStatus,
-) -> None:
-    monkeypatch.setattr(factory, "create_harness_agent", lambda **kwargs: SimpleNamespace())
-    monkeypatch.setattr(factory, "hard_ceiling_compactor", lambda _: object())
-
-    factory.create_primary_harness(
-        "client",
-        "history",
-        "context",
-        _tools(),
-        "tokenizer",
-        _prompt(),
-        fabric_readiness=FabricReadiness(status=status),
-    )
-
-
-def test_factory_requires_exact_fifth_tool_only_when_fabric_is_ready(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(factory, "create_harness_agent", lambda **kwargs: SimpleNamespace())
-    monkeypatch.setattr(factory, "hard_ceiling_compactor", lambda _: object())
-    ready = FabricReadiness(status=FabricReadinessStatus.READY)
-    failed = FabricReadiness(status=FabricReadinessStatus.FAILED)
-
-    with pytest.raises(RuntimeError, match="requires query_fabric"):
-        factory.create_primary_harness(
-            "client", "history", "context", _tools(), "tokenizer", _prompt(), fabric_readiness=ready
-        )
-    with pytest.raises(RuntimeError, match="failed"):
-        factory.create_primary_harness(
-            "client", "history", "context", _tools(), "tokenizer", _prompt(), fabric_readiness=failed
-        )
-    with pytest.raises(RuntimeError, match="not ready"):
-        factory.create_primary_harness(
-            "client",
-            "history",
-            "context",
-            [SimpleNamespace(name="query_fabric"), *_tools()],
-            "tokenizer",
-            _prompt(),
-            fabric_readiness=FabricReadiness(status=FabricReadinessStatus.CONFIGURED),
-        )
-
-    factory.create_primary_harness(
-        "client",
-        "history",
-        "context",
-        [SimpleNamespace(name="query_fabric"), *_tools()],
-        "tokenizer",
-        _prompt(),
-        fabric_readiness=ready,
-    )
 
 
 @pytest.mark.parametrize("profile_id", list(ModelProfileId))

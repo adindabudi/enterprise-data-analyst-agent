@@ -34,12 +34,6 @@
       "assignmentName": "web",
       "principalOutput": "webIdentityPrincipalId",
       "scopeOutput": "redisClusterId"
-    },
-    {
-      "accessPolicyName": "default",
-      "assignmentName": "worker",
-      "principalOutput": "workerIdentityPrincipalId",
-      "scopeOutput": "redisClusterId"
     }
   ]
 }

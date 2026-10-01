@@ -13,7 +13,6 @@ from eda_runtime_state.models import QueryResultRef, TaskRecord
 from eda_worker.context.repository import RuntimeTaskStateRepository
 from eda_worker.context.task_state import (
     ContextSnapshot,
-    FabricQueryContextRef,
     QueryResultContextRef,
     TaskStateContextProvider,
 )
@@ -36,15 +35,6 @@ class FakeRepository:
         return ContextSnapshot(
             confirmed_requirements=("Analyze FY2026 revenue",),
             provenance_refs=("input-7",),
-            fabric_queries=(
-                FabricQueryContextRef(
-                    query_ref="fabric-query-1234567890abcdef",
-                    source_alias="sales",
-                    purpose="aggregate",
-                    result_shape="tabular",
-                    reconciliation_status="not_required",
-                ),
-            ),
             workflow_phase="analyzing",
             pending_auth=False,
         )
@@ -62,15 +52,6 @@ async def test_context_provider_injects_canonical_structured_state() -> None:
     payload = json.loads(instructions.split("\n", 1)[1])
     assert payload["confirmedRequirements"] == ["Analyze FY2026 revenue"]
     assert payload["provenanceRefs"] == ["input-7"]
-    assert payload["fabricQueries"] == [
-        {
-            "queryRef": "fabric-query-1234567890abcdef",
-            "sourceAlias": "sales",
-            "purpose": "aggregate",
-            "resultShape": "tabular",
-            "reconciliationStatus": "not_required",
-        }
-    ]
     assert "rows" not in instructions
     assert "dax" not in instructions.casefold()
     assert "pendingCommandText" not in payload

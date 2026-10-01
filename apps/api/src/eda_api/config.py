@@ -110,7 +110,6 @@ class Settings(BaseSettings):
     frontend_dist: Path = DEFAULT_FRONTEND_DIST
     model_contract_path: str = "/app/config/model-contract.json"
     tokenizer_calibration_path: str = "/app/config/tokenizer-calibration.json"
-    interactive_prompt_path: str = "/app/config/gpt-5.6-terra-v1.md"
 
     @model_validator(mode="after")
     def validate_identity_credential(self) -> Self:
@@ -129,7 +128,6 @@ class Settings(BaseSettings):
     @classmethod
     def reject_fabric_target_catalogs(cls, values: Any) -> Any:
         forbidden_catalogs = {
-            "fabric_semantic_models",
             "powerbi_project_models",
             "POWERBI_PROJECT_MODELS_JSON",
         }
@@ -153,8 +151,6 @@ class Settings(BaseSettings):
             self.fabric_cache_wrap_key_name,
         }:
             raise ValueError("enabled Fabric configuration requires all auth settings")
-        if self.fabric_provider is not FabricProvider.ONTOLOGY and self.fabric_ontologies:
-            raise ValueError("only the ontology provider accepts an API target catalog")
         if any(not re.fullmatch(r"[a-z][a-z0-9-]{1,39}", alias) for alias in self.fabric_ontologies):
             raise ValueError("ontology target alias is invalid")
         return self

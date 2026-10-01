@@ -32,15 +32,14 @@ def test_fabric_auth_keeps_only_declared_crypto_data_actions() -> None:
     assert "az keyvault certificate create" in source
 
 
-def test_root_and_worker_contract_support_exactly_one_fabric_provider() -> None:
+def test_root_and_api_contract_support_only_the_ontology_provider() -> None:
     variables = read("infra/terraform/variables.tf")
-    worker = read("infra/terraform/modules/container_apps/main.tf")
+    container_apps = read("infra/terraform/modules/container_apps/main.tf")
 
-    assert "semantic_model" in variables
-    assert "ontology" in variables
     assert 'variable "fabric_provider"' in variables
-    assert "FABRIC_SEMANTIC_MODELS_JSON" in worker
-    assert "FABRIC_ONTOLOGIES_JSON" in worker
-    assert "FABRIC_CLIENT_SECRET" not in worker
-    assert "FABRIC_ACCESS_TOKEN" not in worker
-    assert "FABRIC_MCP_URL" not in worker
+    assert 'contains(["", "ontology"], var.fabric_provider)' in variables
+    assert 'var.fabric_provider == "ontology" ? [' in container_apps
+    assert "FABRIC_ONTOLOGIES_JSON" in container_apps
+    assert "FABRIC_CLIENT_SECRET" not in container_apps
+    assert "FABRIC_ACCESS_TOKEN" not in container_apps
+    assert "FABRIC_MCP_URL" not in container_apps

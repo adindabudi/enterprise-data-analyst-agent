@@ -28,13 +28,11 @@ param workerImage string = 'example.azurecr.io/eda-worker@sha256:000000000000000
 param fabricEnabled bool = false
 @allowed([
   ''
-  'semantic_model'
   'ontology'
 ])
 param fabricProvider string = ''
 param fabricTenantId string = ''
 param fabricClientId string = ''
-param fabricSemanticModelsJson string = '{}'
 @secure()
 param fabricOntologiesJson string = ''
 param fabricSigningCertificateName string = 'fabric-oauth-signing'
@@ -78,7 +76,8 @@ var configurationHash = uniqueString(
   fabricProvider,
   fabricTenantId,
   fabricClientId,
-  fabricSemanticModelsJson,
+  // Retired semantic model catalog; the empty value keeps existing deployment ids stable.
+  '',
   fabricOntologiesJson,
   fabricSigningCertificateName,
   fabricCacheWrapKeyName,
@@ -192,7 +191,6 @@ module fabricAuth 'modules/fabric-auth.bicep' = if (fabricEnabled) {
     tags: tags
     vaultName: naming.outputs.names.keyVault
     webIdentityPrincipalId: identities.outputs.webIdentityPrincipalId
-    workerIdentityPrincipalId: identities.outputs.workerIdentityPrincipalId
   }
 }
 
@@ -223,7 +221,6 @@ module redis 'modules/redis.bicep' = {
     redisSku: redisSku
     tags: tags
     webIdentityPrincipalId: identities.outputs.webIdentityPrincipalId
-    workerIdentityPrincipalId: identities.outputs.workerIdentityPrincipalId
     privateEndpointsSubnetId: network.outputs.privateEndpointsSubnetId
     privateDnsZoneId: network.outputs.redisPrivateDnsZoneId
   }
@@ -238,7 +235,6 @@ module foundry 'modules/foundry.bicep' = {
     tags: tags
     agentSubnetId: network.outputs.foundryAgentSubnetId
     webIdentityPrincipalId: identities.outputs.webIdentityPrincipalId
-    workerIdentityPrincipalId: identities.outputs.workerIdentityPrincipalId
     modelProfile: modelProfile
     modelCapacity: modelCapacity
   }
@@ -277,7 +273,6 @@ module containerApps 'modules/container-apps.bicep' = {
     fabricKeyVaultUrl: fabricEnabled ? fabricAuth!.outputs.vaultUri : ''
     fabricSigningCertificateName: fabricSigningCertificateName
     fabricCacheWrapKeyName: fabricCacheWrapKeyName
-    fabricSemanticModelsJson: fabricSemanticModelsJson
     fabricOntologiesJson: fabricOntologiesJson
     profile: profile
     redisUrl: 'rediss://${redis.outputs.hostname}:${redis.outputs.port}/0'
@@ -367,7 +362,6 @@ output redisPort int = redis.outputs.port
 output containerAppsEnvironmentId string = containerApps.outputs.environmentId
 output apiAppId string = containerApps.outputs.apiId
 output cleanupJobId string = containerApps.outputs.cleanupJobId
-output fabricAcceptanceJobId string = fabricEnabled ? containerApps.outputs.fabricAcceptanceJobId : ''
 output fabricVaultUrl string = fabricEnabled ? fabricAuth!.outputs.vaultUri : ''
 output budgetActionGroupId string = monitoringAlertsEnabled ? budgetsAlerts!.outputs.actionGroupId : ''
 output deploymentId string = configurationHash

@@ -121,9 +121,7 @@ async def test_no_argument_or_result_reaches_the_log(caplog: pytest.LogCaptureFi
     workspace_id = "b82afbde-8304-44c0-ac94-3cf69f6da909"
 
     with caplog.at_level("INFO", logger="eda_worker.agent.progress"):
-        await middleware.process(
-            Context("query_fabric", {"task_id": "task_12345678", "workspace": workspace_id}), _noop
-        )
+        await middleware.process(Context("query_graph", {"task_id": "task_12345678", "workspace": workspace_id}), _noop)
 
     # The specification forbids a target UUID reaching logs or telemetry.
     assert workspace_id not in caplog.records[-1].getMessage()

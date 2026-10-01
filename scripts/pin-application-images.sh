@@ -26,15 +26,6 @@ azd_value() {
     printf '%s\n' "$variable_value"
 }
 
-azd_optional_value() {
-    variable_name="$1"
-    variable_value="$(printf '%s\n' "$azd_values" | sed -n "s/^${variable_name}=//p" | head -n 1)"
-    case "$variable_value" in
-        \"*\") variable_value="${variable_value#\"}"; variable_value="${variable_value%\"}" ;;
-    esac
-    printf '%s\n' "$variable_value"
-}
-
 resource_name() {
     resource_id="$1"
     case "$resource_id" in
@@ -48,7 +39,6 @@ resource_group="$(azd_value AZURE_RESOURCE_GROUP)"
 registry_login_server="$(azd_value CONTAINER_REGISTRY_LOGIN_SERVER)"
 api_app_id="$(azd_value API_APP_ID)"
 cleanup_job_id="$(azd_value CLEANUP_JOB_ID)"
-fabric_acceptance_job_id="$(azd_optional_value FABRIC_ACCEPTANCE_JOB_ID)"
 case "$environment_name" in
     *[!a-z0-9-]* | '') fail "AZURE_ENV_NAME must contain only lowercase letters, digits, and hyphens" ;;
 esac
@@ -60,10 +50,6 @@ esac
 registry_name="${registry_login_server%%.*}"
 api_name="$(resource_name "$api_app_id")"
 cleanup_name="$(resource_name "$cleanup_job_id")"
-fabric_acceptance_name=""
-if [ -n "$fabric_acceptance_job_id" ]; then
-    fabric_acceptance_name="$(resource_name "$fabric_acceptance_job_id")"
-fi
 
 resolve_digest() {
     source_image="$1"
@@ -134,10 +120,6 @@ sandbox_disk_image_id="$(azd_value EDA_SANDBOX_DISK_IMAGE_ID)"
 
 az containerapp job update --name "$cleanup_name" --resource-group "$resource_group" --image "$worker_image" --only-show-errors >/dev/null \
     || fail "unable to pin cleanup job image"
-if [ -n "$fabric_acceptance_name" ]; then
-    az containerapp job update --name "$fabric_acceptance_name" --resource-group "$resource_group" --image "$worker_image" --only-show-errors >/dev/null \
-        || fail "unable to pin Fabric acceptance job image"
-fi
 az containerapp update --name "$api_name" --resource-group "$resource_group" \
     --image "$api_image" \
     --set-env-vars \
@@ -160,12 +142,7 @@ final_api_image="$(az containerapp show --ids "$api_app_id" --query properties.t
     || fail "unable to verify API image"
 final_cleanup_image="$(az containerapp job show --ids "$cleanup_job_id" --query properties.template.containers[0].image --output tsv --only-show-errors)" \
     || fail "unable to verify cleanup job image"
-final_fabric_acceptance_image="$worker_image"
-if [ -n "$fabric_acceptance_job_id" ]; then
-    final_fabric_acceptance_image="$(az containerapp job show --ids "$fabric_acceptance_job_id" --query properties.template.containers[0].image --output tsv --only-show-errors)" \
-        || fail "unable to verify Fabric acceptance job image"
-fi
-for final_image in "$final_api_image" "$final_cleanup_image" "$final_fabric_acceptance_image"; do
+for final_image in "$final_api_image" "$final_cleanup_image"; do
     case "$final_image" in
         *@sha256:????????????????????????????????????????????????????????????????) ;;
         *) fail "final deployed image is not pinned by SHA-256 digest" ;;
@@ -173,7 +150,6 @@ for final_image in "$final_api_image" "$final_cleanup_image" "$final_fabric_acce
 done
 [ "$final_api_image" = "$api_image" ] || fail "API image changed while pinning"
 [ "$final_cleanup_image" = "$worker_image" ] || fail "cleanup image differs from worker image"
-[ "$final_fabric_acceptance_image" = "$worker_image" ] || fail "Fabric acceptance image differs from worker image"
 
 verify_api_environment() {
     variable_name="$1"

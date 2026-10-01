@@ -95,7 +95,7 @@ describe("task event reducer", () => {
       type: "auth.required",
       payload: {
         actionPath: "/api/fabric/auth/start",
-        provider: "semantic_model",
+        provider: "ontology",
       },
     } as unknown as TaskEvent);
 

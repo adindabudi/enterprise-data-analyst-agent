@@ -253,27 +253,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             uploads=cast(UploadService, uploads),
             input_artifact_writer=cast(InputArtifactWriter | None, input_artifact_writer),
         )
-        fabric_readiness = app.state.fabric_readiness_override
-        if fabric_readiness is None:
-            fabric_feature: FabricFeatureState | None = None
-            if config.fabric_enabled and database is not None:
-                try:
-                    feature_id = (
-                        "feature:fabric-ontology"
-                        if config.fabric_provider is not None and config.fabric_provider.value == "ontology"
-                        else "feature:fabric"
-                    )
-                    feature_document = await database.get_container_client(config.cosmos_runtime_container).read_item(
-                        item=feature_id,
-                        partition_key=feature_id,
-                    )
-                    fabric_feature = FabricFeatureState.model_validate(
-                        {key: value for key, value in feature_document.items() if not key.startswith("_")}
-                    )
-                except (CosmosResourceNotFoundError, ValueError):
-                    fabric_feature = None
-            fabric_readiness = fabric_pack_status(enabled=config.fabric_enabled, feature=fabric_feature)
-        app.state.fabric_readiness = fabric_readiness
+        fabric_readiness_override: FabricPackStatus | None = app.state.fabric_readiness_override
+        fabric_feature: FabricFeatureState | None = None
+        if fabric_readiness_override is None and config.fabric_enabled and database is not None:
+            try:
+                feature_document = await database.get_container_client(config.cosmos_runtime_container).read_item(
+                    item="feature:fabric-ontology",
+                    partition_key="feature:fabric-ontology",
+                )
+                fabric_feature = FabricFeatureState.model_validate(
+                    {key: value for key, value in feature_document.items() if not key.startswith("_")}
+                )
+            except (CosmosResourceNotFoundError, ValueError):
+                fabric_feature = None
+        # A source an operator marked failed stays off; otherwise a bound schema snapshot is what turns it on.
+        fabric_blocked = (
+            fabric_readiness_override in {FabricPackStatus.FAILED, FabricPackStatus.DISABLED}
+            if fabric_readiness_override is not None
+            else fabric_feature is not None and fabric_feature.state == "failed"
+        )
         document_readiness = app.state.document_readiness_override
         if document_readiness is None:
             document_feature: DocumentFeatureState | None = None
@@ -348,7 +346,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                     config.fabric_provider is FabricProvider.ONTOLOGY
                     and config.fabric_tenant_id == config.entra_tenant_id
                     and len(config.fabric_ontologies) == 1
-                    and fabric_readiness in {FabricPackStatus.CONFIGURED, FabricPackStatus.READY}
+                    and not fabric_blocked
                 ):
                     fabric_access_token_client = FabricAccessTokenClient(
                         repository=fabric_repository,
@@ -412,7 +410,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         else:
             app.state.fabric_auth_service = None
         app.state.fabric_capacity = fabric_capacity
-        # Fabric can be queried from a configured same-tenant source long before acceptance promotes it to ready.
+        # Nothing promotes the pack to ready until the snapshot path has an acceptance gate.
+        app.state.fabric_readiness = (
+            fabric_readiness_override
+            if fabric_readiness_override is not None
+            else fabric_pack_status(enabled=config.fabric_enabled, feature=fabric_feature, source_wired=source_wired)
+        )
         app.state.fabric_chat_query = source_wired
         if analysis is not None:
             await analysis.start()

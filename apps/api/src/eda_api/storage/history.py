@@ -5,13 +5,13 @@ from typing import Literal, Protocol
 
 from azure.cosmos.aio import ContainerProxy
 from eda_api.auth.models import Principal
-from eda_api.chat.provenance import ChatQueryRecord, legacy_query_steps, read_query_record
 from eda_contracts.tasks import TaskStatus
 from eda_runtime_state.messages import CanonicalMessage
 from eda_runtime_state.models import TaskPartition, TaskRecord
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import camel_case
+from .query_provenance import ChatQueryRecord, legacy_query_steps, read_query_record
 
 
 class HistoryView(BaseModel):

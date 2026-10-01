@@ -32,14 +32,13 @@ def test_azure_yaml_deploys_only_the_api_with_the_analysis_runtime_in_safe_hook_
     )
     assert hooks["postprovision"]["run"] == (
         "uv run python scripts/sync-bicep-outputs.py && "
-        "./scripts/configure-fabric-entra.sh finalize && ./scripts/run-fabric-provider-hook.sh postprovision "
+        "./scripts/configure-fabric-entra.sh finalize "
         "&& ./scripts/build-worker-image.sh && ./scripts/build-sandbox-image.sh && ./scripts/deploy-sandbox-group.sh "
         "&& ./scripts/configure-entra-federation.sh"
     )
     assert hooks["postdeploy"]["run"] == (
         "./scripts/doctor-documents.sh --phase postdeploy --output .artifacts/document-image-contract.json "
         "&& ./scripts/publish-document-contract-job.sh && ./scripts/pin-application-images.sh "
-        "&& ./scripts/run-fabric-provider-hook.sh postdeploy "
         "&& ./scripts/deploy-smoke.sh"
     )
 

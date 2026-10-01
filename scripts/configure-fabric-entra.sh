@@ -43,8 +43,7 @@ if [[ "${FABRIC_ENABLED:-false}" == "false" ]]; then
     exit 0
 fi
 [[ "${FABRIC_ENABLED:-}" == "true" ]] || fail "FABRIC_ENABLED must be true or false"
-[[ "${FABRIC_PROVIDER:-}" == "semantic_model" || "${FABRIC_PROVIDER:-}" == "ontology" ]] \
-    || fail "FABRIC_PROVIDER must be semantic_model or ontology"
+[[ "${FABRIC_PROVIDER:-}" == "ontology" ]] || fail "FABRIC_PROVIDER must be ontology"
 
 for name in FABRIC_AZURE_CONFIG_DIR PRODUCT_AZURE_CONFIG_DIR FABRIC_TENANT_ID AZURE_TENANT_ID AZURE_ENV_NAME; do
     require_value "$name"

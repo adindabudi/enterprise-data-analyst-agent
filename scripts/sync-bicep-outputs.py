@@ -10,7 +10,6 @@ OUTPUT_ALIASES = {
     "API_URL": "appUrl",
     "API_APP_ID": "apiAppId",
     "CLEANUP_JOB_ID": "cleanupJobId",
-    "FABRIC_ACCEPTANCE_JOB_ID": "fabricAcceptanceJobId",
     "DEPLOYMENT_ID": "deploymentId",
     "CONTAINER_REGISTRY_ID": "containerRegistryId",
     "CONTAINER_REGISTRY_LOGIN_SERVER": "containerRegistryLoginServer",
@@ -40,7 +39,7 @@ def environment_updates(values: Mapping[str, object]) -> dict[str, str]:
         value = values.get(original)
         if not isinstance(value, (str, int)) or isinstance(value, bool):
             raise ValueError(f"missing or invalid Bicep output: {original}")
-        if not str(value) and alias != "FABRIC_ACCEPTANCE_JOB_ID":
+        if not str(value):
             raise ValueError(f"empty Bicep output: {original}")
         updates[alias] = str(value)
     return updates

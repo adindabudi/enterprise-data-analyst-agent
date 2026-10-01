@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 
 import eda_worker.main as worker_main
@@ -50,31 +49,3 @@ def test_publish_documents_cli_runs_private_contract_publication(monkeypatch: py
     worker_main.main()
 
     assert calls == [True]
-
-
-def test_accept_fabric_cli_rejects_evidence_that_self_promotes_ready(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    evidence_path = tmp_path / "evidence.json"
-    evidence_path.write_text(
-        json.dumps(
-            {
-                "provider": "ontology",
-                "state": "ready",
-                "topology": "cross_tenant",
-                "providerContractDigest": "a" * 64,
-                "authContractDigest": "b" * 64,
-                "runId": "run_01HZZZZZZZZZZZZZZZZZZZZZZZ",
-            }
-        )
-    )
-    monkeypatch.setattr(worker_main, "configure_telemetry", lambda: None)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["eda-worker", "accept-fabric", "--provider", "ontology", "--evidence", str(evidence_path)],
-    )
-
-    with pytest.raises(SystemExit, match="2"):
-        worker_main.main()

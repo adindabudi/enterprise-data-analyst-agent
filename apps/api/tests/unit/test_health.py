@@ -71,8 +71,8 @@ def test_core_ready_configuration_requires_every_gate(settings: Settings) -> Non
 def test_api_fabric_health_is_filtered_and_fail_closed() -> None:
     configured = FabricFeatureState.model_validate(
         {
-            "id": "feature:fabric",
-            "provider": "semantic_model",
+            "id": "feature:fabric-ontology",
+            "provider": "ontology",
             "state": "configured",
             "providerContractSha256": "a" * 64,
             "deploymentId": "deployment-20260724",
@@ -81,10 +81,15 @@ def test_api_fabric_health_is_filtered_and_fail_closed() -> None:
     )
     ready = configured.model_copy(update={"state": "ready", "acceptance_evidence_sha256": "b" * 64})
 
-    assert fabric_pack_status(enabled=False, feature=None) is FabricPackStatus.DISABLED
-    assert fabric_pack_status(enabled=True, feature=None) is FabricPackStatus.FAILED
-    assert fabric_pack_status(enabled=True, feature=configured) is FabricPackStatus.CONFIGURED
-    assert fabric_pack_status(enabled=True, feature=ready) is FabricPackStatus.READY
+    assert fabric_pack_status(enabled=False, feature=None, source_wired=False) is FabricPackStatus.DISABLED
+    # Enabled without a loaded snapshot is a misconfiguration; a loaded snapshot alone makes it configured.
+    assert fabric_pack_status(enabled=True, feature=None, source_wired=False) is FabricPackStatus.FAILED
+    assert fabric_pack_status(enabled=True, feature=None, source_wired=True) is FabricPackStatus.CONFIGURED
+    assert fabric_pack_status(enabled=True, feature=configured, source_wired=True) is FabricPackStatus.CONFIGURED
+    assert fabric_pack_status(enabled=True, feature=ready, source_wired=True) is FabricPackStatus.READY
+    assert fabric_pack_status(enabled=True, feature=ready, source_wired=False) is FabricPackStatus.FAILED
+    failed = configured.model_copy(update={"state": "failed"})
+    assert fabric_pack_status(enabled=True, feature=failed, source_wired=True) is FabricPackStatus.FAILED
     assert set(configured.model_dump(mode="json", by_alias=True)) == {
         "id",
         "provider",
@@ -94,18 +99,6 @@ def test_api_fabric_health_is_filtered_and_fail_closed() -> None:
         "acceptanceEvidenceSha256",
         "verifiedAt",
     }
-
-    ontology = FabricFeatureState.model_validate(
-        {
-            "id": "feature:fabric-ontology",
-            "provider": "ontology",
-            "state": "configured",
-            "providerContractSha256": "c" * 64,
-            "deploymentId": "deployment-20260724",
-            "verifiedAt": "2026-07-24T00:00:00Z",
-        }
-    )
-    assert fabric_pack_status(enabled=True, feature=ontology) is FabricPackStatus.CONFIGURED
 
 
 def test_api_document_health_is_evidence_bound_and_filtered() -> None:

@@ -103,10 +103,6 @@ variable "fabric_cache_wrap_key_name" {
   type = string
 }
 
-variable "fabric_semantic_models_json" {
-  type = string
-}
-
 variable "fabric_ontologies_json" {
   type = string
 }
@@ -182,7 +178,6 @@ locals {
   environment_name_full = "cae-eda-${var.environment_name}-${var.suffix}"
   api_name              = "api-eda-${var.environment_name}-${var.suffix}"
   cleanup_name          = "cleanup-eda-${var.environment_name}-${var.suffix}"
-  acceptance_name       = "fabric-acc-${var.environment_name}-${var.suffix}"
 }
 
 resource "azapi_resource" "environment" {
@@ -279,15 +274,17 @@ resource "azapi_resource" "api" {
               { name = "POWERBI_PROJECT_ENABLED", value = tostring(var.powerbi_project_enabled) },
               ], var.sandbox_image != null ? [
               { name = "EDA_SANDBOX_IMAGE_DIGEST", value = element(split("@", var.sandbox_image), 1) },
-              ] : [], var.fabric_enabled ? [
-              { name = "FABRIC_ENABLED", value = "true" },
-              { name = "FABRIC_PROVIDER", value = var.fabric_provider },
-              { name = "FABRIC_TENANT_ID", value = var.fabric_tenant_id },
-              { name = "FABRIC_CLIENT_ID", value = var.fabric_client_id },
-              { name = "FABRIC_KEY_VAULT_URL", value = var.fabric_key_vault_url },
-              { name = "FABRIC_SIGNING_CERTIFICATE_NAME", value = var.fabric_signing_certificate_name },
-              { name = "FABRIC_CACHE_WRAP_KEY_NAME", value = var.fabric_cache_wrap_key_name },
-            ] : [])
+              ] : [], var.fabric_enabled ? concat([
+                { name = "FABRIC_ENABLED", value = "true" },
+                { name = "FABRIC_PROVIDER", value = var.fabric_provider },
+                { name = "FABRIC_TENANT_ID", value = var.fabric_tenant_id },
+                { name = "FABRIC_CLIENT_ID", value = var.fabric_client_id },
+                { name = "FABRIC_KEY_VAULT_URL", value = var.fabric_key_vault_url },
+                { name = "FABRIC_SIGNING_CERTIFICATE_NAME", value = var.fabric_signing_certificate_name },
+                { name = "FABRIC_CACHE_WRAP_KEY_NAME", value = var.fabric_cache_wrap_key_name },
+                ], var.fabric_provider == "ontology" ? [
+                { name = "FABRIC_ONTOLOGIES_JSON", value = var.fabric_ontologies_json },
+            ] : []) : [])
             probes = [
               { type = "Startup", httpGet = { path = "/health/platform-ready", port = 8000 }, periodSeconds = 5, failureThreshold = 30 },
               { type = "Readiness", httpGet = { path = "/health/platform-ready", port = 8000 }, periodSeconds = 10, failureThreshold = 3 },
@@ -353,80 +350,6 @@ resource "azapi_resource" "cleanup" {
   }
 }
 
-resource "azapi_resource" "fabric_acceptance" {
-  count                     = var.deploy_image_dependent_resources && var.fabric_enabled ? 1 : 0
-  type                      = "Microsoft.App/jobs@2026-01-01"
-  name                      = local.acceptance_name
-  location                  = var.location
-  parent_id                 = local.resource_group_id
-  schema_validation_enabled = false
-  tags                      = var.tags
-
-  body = {
-    identity = {
-      type = "UserAssigned"
-      userAssignedIdentities = {
-        "${var.worker_identity_id}" = {}
-      }
-    }
-    properties = {
-      environmentId = azapi_resource.environment.id
-      configuration = {
-        triggerType       = "Manual"
-        replicaTimeout    = 1800
-        replicaRetryLimit = 0
-        manualTriggerConfig = {
-          parallelism            = 1
-          replicaCompletionCount = 1
-        }
-        registries = [{ server = var.container_registry_login_server, identity = var.worker_identity_id }]
-        secrets    = [{ name = "appinsights-connection-string", value = var.app_insights_connection_string }]
-      }
-      template = {
-        containers = [
-          {
-            name      = "fabric-acceptance"
-            image     = var.worker_image
-            command   = ["eda-worker", "accept-fabric", "--provider", var.fabric_provider]
-            resources = { cpu = 1, memory = "2Gi" }
-            env = concat([
-              { name = "APPLICATIONINSIGHTS_CONNECTION_STRING", secretRef = "appinsights-connection-string" },
-              { name = "FABRIC_ACCEPTANCE_MODE", value = "true" },
-              { name = "EDA_APP_ENV", value = "production" },
-              { name = "EDA_DEPLOYMENT_ID", value = var.deployment_id },
-              { name = "EDA_MANAGED_IDENTITY_CLIENT_ID", value = var.worker_identity_client_id },
-              { name = "EDA_COSMOS_ENDPOINT", value = var.cosmos_endpoint },
-              { name = "EDA_COSMOS_DATABASE", value = var.cosmos_database },
-              { name = "EDA_COSMOS_WORKSPACE_CONTAINER", value = var.cosmos_workspace_container },
-              { name = "EDA_COSMOS_AUTH_CONTAINER", value = "auth" },
-              { name = "EDA_COSMOS_RUNTIME_CONTAINER", value = "runtime" },
-              { name = "EDA_COSMOS_FABRIC_AUTH_CONTAINER", value = "fabricAuth" },
-              { name = "EDA_BLOB_ACCOUNT_URL", value = var.blob_account_url },
-              { name = "EDA_BLOB_SESSIONS_CONTAINER", value = "sessions" },
-              { name = "EDA_REDIS_URL", value = var.redis_url },
-              { name = "EDA_FOUNDRY_PROJECT_ENDPOINT", value = var.foundry_project_endpoint },
-              { name = "EDA_FOUNDRY_MODEL_DEPLOYMENT", value = var.foundry_model_deployment },
-              { name = "EDA_MODEL_PROFILE", value = var.model_profile },
-              { name = "EDA_FOUNDRY_HOSTING", value = "azure" },
-              { name = "FABRIC_ENABLED", value = "true" },
-              { name = "FABRIC_PROVIDER", value = var.fabric_provider },
-              { name = "FABRIC_TENANT_ID", value = var.fabric_tenant_id },
-              { name = "FABRIC_CLIENT_ID", value = var.fabric_client_id },
-              { name = "FABRIC_KEY_VAULT_URL", value = var.fabric_key_vault_url },
-              { name = "FABRIC_SIGNING_CERTIFICATE_NAME", value = var.fabric_signing_certificate_name },
-              { name = "FABRIC_CACHE_WRAP_KEY_NAME", value = var.fabric_cache_wrap_key_name },
-              ], var.fabric_provider == "semantic_model" ? [
-              { name = "FABRIC_SEMANTIC_MODELS_JSON", value = var.fabric_semantic_models_json },
-              ] : [
-              { name = "FABRIC_ONTOLOGIES_JSON", value = var.fabric_ontologies_json },
-            ])
-          }
-        ]
-      }
-    }
-  }
-}
-
 output "environment_id" {
   value = azapi_resource.environment.id
 }
@@ -441,8 +364,4 @@ output "api_url" {
 
 output "cleanup_job_id" {
   value = var.deploy_image_dependent_resources ? azapi_resource.cleanup[0].id : null
-}
-
-output "fabric_acceptance_job_id" {
-  value = var.deploy_image_dependent_resources && var.fabric_enabled ? azapi_resource.fabric_acceptance[0].id : null
 }

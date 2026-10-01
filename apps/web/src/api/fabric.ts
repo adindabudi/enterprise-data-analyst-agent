@@ -9,7 +9,7 @@ export type FabricSourceMetadata = {
 };
 
 export type FabricAuthorizationStatus = {
-  provider: "semantic_model" | "ontology";
+  provider: "ontology";
   state: "unlinked" | "linked" | "reauth_required";
   chatQuery: boolean;
   source?: FabricSourceMetadata;
@@ -70,7 +70,7 @@ export async function getFabricAuthorizationStatus(): Promise<FabricAuthorizatio
     Object.keys(payload).some(
       (key) => !["provider", "state", "chatQuery", "source"].includes(key),
     ) ||
-    !["semantic_model", "ontology"].includes(String(payload.provider)) ||
+    payload.provider !== "ontology" ||
     !["unlinked", "linked", "reauth_required"].includes(
       String(payload.state),
     ) ||

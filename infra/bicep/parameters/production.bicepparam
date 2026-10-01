@@ -23,7 +23,6 @@ param fabricEnabled = readEnvironmentVariable('FABRIC_ENABLED', 'false') == 'tru
 param fabricProvider = readEnvironmentVariable('FABRIC_PROVIDER', '')
 param fabricTenantId = readEnvironmentVariable('FABRIC_TENANT_ID', '')
 param fabricClientId = readEnvironmentVariable('FABRIC_CLIENT_ID', '')
-param fabricSemanticModelsJson = readEnvironmentVariable('FABRIC_SEMANTIC_MODELS_JSON', '{}')
 param fabricOntologiesJson = readEnvironmentVariable('FABRIC_ONTOLOGIES_JSON', '{}')
 param acceptancePrincipalId = readEnvironmentVariable('FABRIC_ACCEPTANCE_PRINCIPAL_ID', '')
 param documentsEnabled = readEnvironmentVariable('DOCUMENTS_ENABLED', 'false') == 'true'

@@ -9,7 +9,6 @@ def settings_values(**overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
         "app_env": "production",
         "managed_identity_client_id": "11111111-1111-1111-1111-111111111111",
-        "entra_client_id": "33333333-3333-3333-3333-333333333333",
         "cosmos_endpoint": "https://example.documents.azure.com",
         "blob_account_url": "https://example.blob.core.windows.net",
         "redis_url": "rediss://cache.southeastasia.redis.azure.net:10000/0",
@@ -37,7 +36,6 @@ def test_production_worker_settings_require_all_secure_service_transports() -> N
 
 def test_worker_reads_the_foundry_project_endpoint_by_its_azd_name(monkeypatch: pytest.MonkeyPatch) -> None:
     environment = {
-        "EDA_ENTRA_CLIENT_ID": "33333333-3333-3333-3333-333333333333",
         "EDA_COSMOS_ENDPOINT": "https://example.documents.azure.com",
         "EDA_BLOB_ACCOUNT_URL": "https://example.blob.core.windows.net",
         "EDA_REDIS_URL": "rediss://cache.southeastasia.redis.azure.net:10000/0",

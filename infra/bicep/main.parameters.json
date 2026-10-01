@@ -44,9 +44,6 @@
     "fabricClientId": {
       "value": "${FABRIC_CLIENT_ID=}"
     },
-    "fabricSemanticModelsJson": {
-      "value": "${FABRIC_SEMANTIC_MODELS_JSON=}"
-    },
     "fabricOntologiesJson": {
       "value": "${FABRIC_ONTOLOGIES_JSON=}"
     },

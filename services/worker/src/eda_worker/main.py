@@ -5,11 +5,7 @@ import asyncio
 import base64
 import binascii
 import os
-from pathlib import Path
 
-from eda_worker.acceptance.fabric import acceptance_passed
-from eda_worker.acceptance.fabric_ontology import AcceptanceEvidence, validate_ontology_acceptance
-from eda_worker.acceptance.runtime import run_semantic_acceptance_job
 from eda_worker.cleanup import (
     AzureBlobCleanup,
     CleanupResult,
@@ -111,10 +107,6 @@ def main() -> None:
     cleanup.add_argument("--before", required=True)
     cleanup.add_argument("--limit", type=int, default=100)
     cleanup.add_argument("--dry-run", action="store_true")
-    fabric_acceptance = subcommands.add_parser("accept-fabric")
-    fabric_acceptance.add_argument("--provider", required=True, choices=("semantic_model", "ontology"))
-    fabric_acceptance.add_argument("--evidence", type=Path)
-    fabric_acceptance.add_argument("--run-id", default=os.getenv("EDA_FABRIC_ACCEPTANCE_RUN_ID"))
     arguments = parser.parse_args()
     configure_logging()
     configure_telemetry()
@@ -124,35 +116,6 @@ def main() -> None:
         except (OSError, RuntimeError, ValueError) as error:
             parser.error(str(error))
         print({"feature": "documents", "state": "configured", "contractSha256": digest})
-        return
-    if arguments.command == "accept-fabric":
-        if arguments.provider == "semantic_model":
-            if arguments.evidence is not None or not arguments.run_id:
-                parser.error("semantic-model acceptance requires --run-id and does not accept --evidence")
-            try:
-                result = asyncio.run(run_semantic_acceptance_job(arguments.run_id))
-            except (OSError, RuntimeError, ValueError) as error:
-                parser.error(str(error))
-            print({"provider": result.provider, "state": "passed" if acceptance_passed(result) else "failed"})
-            if not acceptance_passed(result):
-                raise SystemExit(1)
-            return
-        if arguments.evidence is None:
-            parser.error("ontology acceptance requires --evidence")
-        try:
-            evidence = validate_ontology_acceptance(
-                AcceptanceEvidence.model_validate_json(arguments.evidence.read_text())
-            )
-        except (OSError, ValueError) as error:
-            parser.error(str(error))
-        print(
-            {
-                "provider": evidence.provider,
-                "state": evidence.state,
-                "topology": evidence.topology,
-                "runId": evidence.run_id,
-            }
-        )
         return
     try:
         result = asyncio.run(run_cleanup(before=arguments.before, limit=arguments.limit, dry_run=arguments.dry_run))

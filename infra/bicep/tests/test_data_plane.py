@@ -186,7 +186,7 @@ def test_rbac_contract_loads_without_an_azure_login(tmp_path: Path) -> None:
 
     assert len(expected.arm) == 3
     assert len(expected.cosmos_sql) == 2
-    assert len(expected.redis_access_policies) == 2
+    assert len(expected.redis_access_policies) == 1
 
 
 def test_rbac_contract_verifies_redis_access_policy_assignments() -> None:

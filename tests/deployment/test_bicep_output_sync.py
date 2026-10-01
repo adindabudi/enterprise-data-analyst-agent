@@ -24,7 +24,6 @@ def synchronizer() -> Any:
 def test_sync_publishes_aliases_from_structured_azd_output(synchronizer: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     values = {name: f"output-{name}" for name in synchronizer.OUTPUT_ALIASES.values()}
     values["redisPort"] = 6380
-    values["fabricAcceptanceJobId"] = ""
     writes: list[list[str]] = []
     monkeypatch.setattr(synchronizer.shutil, "which", lambda _name: "/tools/azd")
 
@@ -40,7 +39,6 @@ def test_sync_publishes_aliases_from_structured_azd_output(synchronizer: Any, mo
     assert synchronizer.main() == 0
     assert dict(writes) == synchronizer.environment_updates(values)
     assert dict(writes)["REDIS_PORT"] == "6380"
-    assert dict(writes)["FABRIC_ACCEPTANCE_JOB_ID"] == ""
 
 
 def test_sync_rejects_missing_outputs_before_writing(synchronizer: Any, monkeypatch: pytest.MonkeyPatch) -> None:

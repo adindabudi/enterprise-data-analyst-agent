@@ -51,7 +51,6 @@ COPY .artifacts/model-contract.json /app/config/model-contract.json
 COPY --from=worker-assets /app/config/tokenizer-calibration.json /app/config/tokenizer-calibration.json
 COPY --from=worker-assets --chown=10001:10001 /opt/document-skills /opt/document-skills
 COPY --from=worker-assets /opt/web-skills /opt/web-skills
-COPY services/worker/src/eda_worker/agent/prompts/gpt-5.6-terra-v1.md /app/config/gpt-5.6-terra-v1.md
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/app \
