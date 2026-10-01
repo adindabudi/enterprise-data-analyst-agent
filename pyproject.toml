@@ -10,7 +10,7 @@ dev = [
   "coverage==7.15.2",
   "fakeredis[lua]==2.37.0",
   "httpx==0.28.1",
-  "hypothesis==6.161.0",
+  "hypothesis==6.168.0",
   "jsonschema==4.26.0",
   "license-expression==30.4.4",
   "pyright==1.1.411",
