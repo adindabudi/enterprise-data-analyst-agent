@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -17,10 +18,12 @@ from fastapi.responses import Response
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+from redis.exceptions import RedisError
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 _REDIS_CURSOR = re.compile(r"^\d+-\d+$")
 _TERMINAL_EVENTS = {"run.completed", "run.failed", "run.cancelled"}
+logger = logging.getLogger(__name__)
 
 
 async def owned_task(
@@ -270,7 +273,12 @@ async def stream_task_events(
     current = last_event_id if last_event_id and _REDIS_CURSOR.fullmatch(last_event_id) else "0-0"
     while not await request.is_disconnected():
         assert service.events is not None
-        entries = await service.events.read_after(task.id, current, block_ms=15000)
+        try:
+            entries = await service.events.read_after(task.id, current, block_ms=15000)
+        except RedisError:
+            # Live progress is best-effort. Let EventSource reconnect instead of surfacing a 500.
+            logger.warning("task event stream degraded while reading live updates", extra={"task_id": task.id})
+            return
         for entry in entries:
             current = entry.stream_id
             event_type = entry.event.type.value
