@@ -18,6 +18,7 @@ from eda_runtime_state.events import EventDraft
 from eda_runtime_state.models import TaskRecord
 from eda_runtime_state.tasks import InMemoryRuntimeStateRepository
 from fastapi.testclient import TestClient
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 
 class EmptyEventStore:
@@ -40,6 +41,20 @@ class DelayedEventStore:
         self.read_cursors.append(cursor)
         entries, self.entries = self.entries, []
         return entries
+
+
+class FailingEventStore:
+    def __init__(self) -> None:
+        self.read_cursors: list[str] = []
+
+    async def exists(self, task_id: str) -> bool:
+        del task_id
+        return True
+
+    async def read_after(self, task_id: str, cursor: str, *, block_ms: int = 15000) -> list[object]:
+        del task_id, block_ms
+        self.read_cursors.append(cursor)
+        raise RedisTimeoutError("Timeout reading from redis")
 
 
 class ConnectedRequest:
@@ -204,4 +219,36 @@ async def test_nonterminal_snapshot_waits_for_live_terminal_event() -> None:
         "run.completed",
     ]
     assert streamed[0].id is None
+    assert events.read_cursors == ["0-0"]
+
+
+async def test_transient_redis_timeout_ends_stream_without_raising() -> None:
+    now = datetime.now(UTC)
+    task = TaskRecord(
+        id="task_stream_timeout_12345678",
+        tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
+        owner_object_id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id="ses_1234567890abcdef",
+        status=TaskStatus.PLANNING,
+        checkpoint_sequence=0,
+        command_sequence=0,
+        applied_command_sequence=0,
+        created_at=now,
+        updated_at=now,
+        expires_at=now + timedelta(days=1),
+    )
+    events = FailingEventStore()
+    service = TaskService(None, None, UnknownOrchestrations(), events)  # type: ignore[arg-type]
+
+    streamed = [
+        event
+        async for event in stream_task_events(
+            ConnectedRequest(),  # type: ignore[arg-type]
+            task,
+            service,
+            None,
+        )
+    ]
+
+    assert streamed == []
     assert events.read_cursors == ["0-0"]
